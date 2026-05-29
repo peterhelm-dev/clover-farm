@@ -1,4 +1,4 @@
-import { int, mysqlEnum, mysqlTable, text, timestamp, varchar } from "drizzle-orm/mysql-core";
+import { bigint, decimal, int, json, mysqlEnum, mysqlTable, text, timestamp, varchar } from "drizzle-orm/mysql-core";
 
 /**
  * Core user table backing auth flow.
@@ -25,4 +25,49 @@ export const users = mysqlTable("users", {
 export type User = typeof users.$inferSelect;
 export type InsertUser = typeof users.$inferInsert;
 
-// TODO: Add your tables here
+// ---------------------------------------------------------------------------
+// User health profiles (onboarding data)
+// ---------------------------------------------------------------------------
+export const userProfiles = mysqlTable("userProfiles", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull().unique(),
+  age: int("age"),
+  weightLbs: decimal("weightLbs", { precision: 6, scale: 2 }),
+  allergies: json("allergies").$type<string[]>().default([]),
+  dietaryChoices: json("dietaryChoices").$type<string[]>().default([]),
+  healthConditions: json("healthConditions").$type<string[]>().default([]),
+  calorieTarget: int("calorieTarget").default(2000),
+  proteinTarget: int("proteinTarget").default(120),
+  carbsTarget: int("carbsTarget").default(200),
+  fatTarget: int("fatTarget").default(65),
+  fiberTarget: int("fiberTarget").default(28),
+  onboardingComplete: int("onboardingComplete").default(0), // 0=false, 1=true
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type UserProfile = typeof userProfiles.$inferSelect;
+export type InsertUserProfile = typeof userProfiles.$inferInsert;
+
+// ---------------------------------------------------------------------------
+// Food logs (one row per AI-analyzed meal entry)
+// ---------------------------------------------------------------------------
+export const foodLogs = mysqlTable("foodLogs", {
+  id: bigint("id", { mode: "number" }).autoincrement().primaryKey(),
+  userId: int("userId").notNull(),
+  rawSpeech: text("rawSpeech"),
+  foodName: varchar("foodName", { length: 255 }).notNull(),
+  quantity: varchar("quantity", { length: 255 }),
+  calories: decimal("calories", { precision: 8, scale: 2 }).default("0"),
+  protein: decimal("protein", { precision: 8, scale: 2 }).default("0"),
+  carbs: decimal("carbs", { precision: 8, scale: 2 }).default("0"),
+  fat: decimal("fat", { precision: 8, scale: 2 }).default("0"),
+  fiber: decimal("fiber", { precision: 8, scale: 2 }).default("0"),
+  allergensDetected: json("allergensDetected").$type<string[]>().default([]),
+  confidence: mysqlEnum("confidence", ["high", "medium", "low"]).default("medium"),
+  notes: text("notes"),
+  loggedAt: timestamp("loggedAt").defaultNow().notNull(),
+});
+
+export type FoodLog = typeof foodLogs.$inferSelect;
+export type InsertFoodLog = typeof foodLogs.$inferInsert;
