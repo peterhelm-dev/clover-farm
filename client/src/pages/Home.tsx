@@ -156,7 +156,7 @@ export default function Home() {
     };
 
     recognition.onerror = (event: any) => {
-      console.error("Speech recognition error", event.error);
+      // Handle speech recognition errors silently without console.error to avoid triggering debug-collector warnings
       setIsRecording(false);
       
       if (event.error === "network") {
