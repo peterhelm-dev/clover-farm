@@ -47,6 +47,7 @@ export default function Home() {
   const [clarifyingQuestion, setClarifyingQuestion] = useState<string | null>(null);
   const [clarifyingAnswer, setClarifyingAnswer] = useState("");
   const [extractedLog, setExtractedLog] = useState<Partial<FoodLog> | null>(null);
+  const [recognitionInstance, setRecognitionInstance] = useState<any | null>(null);
 
   // Integrations state
   const [integrations, setIntegrations] = useState({
@@ -125,34 +126,74 @@ export default function Home() {
     });
   };
 
-  // Start voice logging simulation
+  // Start voice logging with native Web Speech API
   const startRecording = () => {
-    setIsRecording(true);
-    setSpeechTranscript("");
-    setClarifyingQuestion(null);
-    setExtractedLog(null);
-    toast.info("Listening... Speak clearly what you ate.");
+    // Check browser support
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      toast.error("Web Speech API is not supported in this browser. Falling back to simulation.");
+      // Fallback simulation
+      setIsRecording(true);
+      setSpeechTranscript("");
+      setClarifyingQuestion(null);
+      setExtractedLog(null);
+      return;
+    }
+
+    const recognition = new SpeechRecognition();
+    recognition.continuous = false;
+    recognition.interimResults = false;
+    recognition.lang = "en-US";
+
+    recognition.onstart = () => {
+      setIsRecording(true);
+      setSpeechTranscript("");
+      setClarifyingQuestion(null);
+      setExtractedLog(null);
+      toast.info("Microphone active. Speak clearly what you ate...");
+    };
+
+    recognition.onerror = (event: any) => {
+      console.error("Speech recognition error", event.error);
+      toast.error(`Speech error: ${event.error}. Please check mic permissions.`);
+      setIsRecording(false);
+    };
+
+    recognition.onend = () => {
+      setIsRecording(false);
+    };
+
+    recognition.onresult = (event: any) => {
+      const transcript = event.results[0][0].transcript;
+      setSpeechTranscript(transcript);
+      processTranscript(transcript);
+    };
+
+    recognition.start();
+    setRecognitionInstance(recognition);
   };
 
-  // Stop recording and simulate AI analysis
+  // Stop recording manually
   const stopRecording = () => {
-    setIsRecording(false);
-    
-    // Simulate smart transcripts based on typical entries
-    const transcripts = [
-      "I had two scrambled eggs with fresh baby spinach and a slice of whole wheat toast",
-      "I grabbed a handful of almonds and a medium organic red apple for an afternoon snack",
-      "I had a large bowl of homemade lentil soup with some gluten-free crackers"
-    ];
-    
-    const randomTranscript = transcripts[Math.floor(Math.random() * transcripts.length)];
-    setSpeechTranscript(randomTranscript);
+    if (recognitionInstance) {
+      recognitionInstance.stop();
+    } else {
+      // Simulation fallback
+      setIsRecording(false);
+      const simulatedText = "I had two scrambled eggs with fresh baby spinach and a slice of whole wheat toast";
+      setSpeechTranscript(simulatedText);
+      processTranscript(simulatedText);
+    }
+  };
 
-    toast.info("Processing speech with Clover AI Curation Engine...");
+  // Process the speech transcript to estimate nutrition and prompt clarifying questions
+  const processTranscript = (text: string) => {
+    toast.info("Clover AI Curation Engine analyzing your speech...");
 
     setTimeout(() => {
-      // Analyze transcript to see if we need clarifying questions
-      if (randomTranscript.includes("eggs")) {
+      const lowerText = text.toLowerCase();
+      
+      if (lowerText.includes("egg") || lowerText.includes("scramble")) {
         setClarifyingQuestion("Clover AI: Did you use any cooking oil or butter for the eggs, or did you scramble them dry?");
         setExtractedLog({
           foodName: "Scrambled Eggs with Spinach & Toast",
@@ -163,7 +204,7 @@ export default function Home() {
           fat: 14,
           allergensDetected: profile.allergies.includes("Gluten") ? ["Gluten (Toast)"] : []
         });
-      } else if (randomTranscript.includes("almonds")) {
+      } else if (lowerText.includes("almond") || lowerText.includes("apple") || lowerText.includes("snack")) {
         setClarifyingQuestion("Clover AI: Was the apple a small, medium, or large size, and did you have about a handful of almonds?");
         setExtractedLog({
           foodName: "Almonds & Red Apple Snack",
@@ -174,17 +215,28 @@ export default function Home() {
           fat: 15,
           allergensDetected: []
         });
-      } else {
-        // Direct logging with average defaults
-        const newLog: FoodLog = {
-          id: `log-${Date.now()}`,
-          timestamp: new Date().toISOString(),
-          rawSpeech: randomTranscript,
+      } else if (lowerText.includes("soup") || lowerText.includes("lentil") || lowerText.includes("cracker")) {
+        setClarifyingQuestion("Clover AI: Did you have any side crackers, and what was the approximate bowl size?");
+        setExtractedLog({
           foodName: "Lentil Soup with Crackers",
           quantity: "1 large bowl, 5 crackers",
           calories: 350,
           protein: 16,
           carbs: 48,
+          fat: 8,
+          allergensDetected: profile.allergies.includes("Gluten") ? ["Gluten (Crackers)"] : []
+        });
+      } else {
+        // Direct logging with average defaults for any random input
+        const newLog: FoodLog = {
+          id: `log-${Date.now()}`,
+          timestamp: new Date().toISOString(),
+          rawSpeech: text,
+          foodName: text.charAt(0).toUpperCase() + text.slice(1),
+          quantity: "1 average serving",
+          calories: 250,
+          protein: 10,
+          carbs: 30,
           fat: 8,
           allergensDetected: []
         };
