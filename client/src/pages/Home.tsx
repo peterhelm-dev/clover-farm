@@ -48,6 +48,8 @@ export default function Home() {
   const [clarifyingAnswer, setClarifyingAnswer] = useState("");
   const [extractedLog, setExtractedLog] = useState<Partial<FoodLog> | null>(null);
   const [recognitionInstance, setRecognitionInstance] = useState<any | null>(null);
+  const [manualTextLog, setManualTextLog] = useState("");
+  const [speechErrorTips, setSpeechErrorTips] = useState<string | null>(null);
 
   // Integrations state
   const [integrations, setIntegrations] = useState({
@@ -155,8 +157,17 @@ export default function Home() {
 
     recognition.onerror = (event: any) => {
       console.error("Speech recognition error", event.error);
-      toast.error(`Speech error: ${event.error}. Please check mic permissions.`);
       setIsRecording(false);
+      
+      if (event.error === "network") {
+        setSpeechErrorTips(
+          "Google Chrome uses cloud-based servers for speech recognition. A 'network' error usually means the browser's cloud speech service was temporarily blocked or restricted by the sandbox environment's iframe security policies. Please use the 'Type Instead' box below to test the full AI parsing!"
+        );
+        toast.error("Microphone cloud connection failed. You can use the text input below instead!");
+      } else {
+        setSpeechErrorTips(`Speech error: ${event.error}. Please check your system microphone permissions.`);
+        toast.error(`Speech error: ${event.error}`);
+      }
     };
 
     recognition.onend = () => {
@@ -784,7 +795,7 @@ export default function Home() {
                       </Button>
                     </div>
                   ) : (
-                    <div className="space-y-6">
+                    <div className="space-y-6 w-full max-w-md">
                       <div className="h-24 w-24 rounded-full bg-primary/10 flex items-center justify-center text-primary mx-auto hover:scale-105 transition-transform duration-300">
                         <Mic className="h-10 w-10" />
                       </div>
@@ -795,6 +806,50 @@ export default function Home() {
                       <Button onClick={startRecording} size="lg" className="rounded-full h-14 px-8 gap-2">
                         <Mic className="h-5 w-5" /> Tap to Start Speaking
                       </Button>
+
+                      {speechErrorTips && (
+                        <div className="mt-4 p-4 bg-destructive/5 border border-destructive/10 rounded-xl text-left text-xs text-destructive space-y-1.5">
+                          <div className="font-bold flex items-center gap-1">
+                            <AlertTriangle className="h-4 w-4 shrink-0" /> Microphone Connection Tip
+                          </div>
+                          <p className="leading-relaxed text-muted-foreground">{speechErrorTips}</p>
+                        </div>
+                      )}
+
+                      <div className="relative flex py-4 items-center">
+                        <div className="flex-grow border-t border-border/40"></div>
+                        <span className="flex-shrink mx-4 text-[10px] text-muted-foreground uppercase tracking-wider">Or Type Instead</span>
+                        <div className="flex-grow border-t border-border/40"></div>
+                      </div>
+
+                      <div className="flex gap-2 w-full">
+                        <Input 
+                          placeholder="e.g., I had scrambled eggs with spinach and toast"
+                          value={manualTextLog}
+                          onChange={e => setManualTextLog(e.target.value)}
+                          onKeyDown={e => {
+                            if (e.key === "Enter" && manualTextLog.trim()) {
+                              setSpeechTranscript(manualTextLog);
+                              processTranscript(manualTextLog);
+                              setManualTextLog("");
+                            }
+                          }}
+                          className="text-xs bg-card"
+                        />
+                        <Button 
+                          onClick={() => {
+                            if (manualTextLog.trim()) {
+                              setSpeechTranscript(manualTextLog);
+                              processTranscript(manualTextLog);
+                              setManualTextLog("");
+                            }
+                          }}
+                          size="sm"
+                          className="text-xs"
+                        >
+                          Log Food
+                        </Button>
+                      </div>
                     </div>
                   )}
                 </Card>
