@@ -143,16 +143,18 @@ export default function Home() {
     }
 
     const recognition = new SpeechRecognition();
-    recognition.continuous = false;
-    recognition.interimResults = false;
+    recognition.continuous = true; // Stay active even when the user pauses
+    recognition.interimResults = true; // Show live interim words as the user speaks
     recognition.lang = "en-US";
+
+    let finalTranscript = "";
 
     recognition.onstart = () => {
       setIsRecording(true);
       setSpeechTranscript("");
       setClarifyingQuestion(null);
       setExtractedLog(null);
-      toast.info("Microphone active. Speak clearly what you ate...");
+      toast.info("Continuous dictation active. Speak as long as you want. Tap 'Stop' when done!");
     };
 
     recognition.onerror = (event: any) => {
@@ -175,9 +177,15 @@ export default function Home() {
     };
 
     recognition.onresult = (event: any) => {
-      const transcript = event.results[0][0].transcript;
-      setSpeechTranscript(transcript);
-      processTranscript(transcript);
+      let interimTranscript = "";
+      for (let i = event.resultIndex; i < event.results.length; ++i) {
+        if (event.results[i].isFinal) {
+          finalTranscript += event.results[i][0].transcript + " ";
+        } else {
+          interimTranscript += event.results[i][0].transcript;
+        }
+      }
+      setSpeechTranscript(finalTranscript + interimTranscript);
     };
 
     recognition.start();
@@ -188,6 +196,14 @@ export default function Home() {
   const stopRecording = () => {
     if (recognitionInstance) {
       recognitionInstance.stop();
+      // Process whatever final transcript was gathered during the continuous session
+      setTimeout(() => {
+        if (speechTranscript.trim()) {
+          processTranscript(speechTranscript);
+        } else {
+          toast.warning("No speech detected. Try speaking or using the text box!");
+        }
+      }, 500);
     } else {
       // Simulation fallback
       setIsRecording(false);
