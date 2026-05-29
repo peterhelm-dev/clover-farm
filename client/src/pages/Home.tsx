@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -40,7 +41,7 @@ export default function Home() {
     healthConditions: [] as string[]
   });
 
-  // Voice recording simulation states
+  // Voice recording states
   const [isRecording, setIsRecording] = useState(false);
   const [recordingDuration, setRecordingDuration] = useState(0);
   const [speechTranscript, setSpeechTranscript] = useState("");
@@ -50,6 +51,12 @@ export default function Home() {
   const [recognitionInstance, setRecognitionInstance] = useState<any | null>(null);
   const [manualTextLog, setManualTextLog] = useState("");
   const [speechErrorTips, setSpeechErrorTips] = useState<string | null>(null);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [aiNotes, setAiNotes] = useState<string | null>(null);
+  const [aiConfidence, setAiConfidence] = useState<"high" | "medium" | "low" | null>(null);
+
+  // tRPC mutation for AI nutritional analysis
+  const analyzeTranscript = trpc.nutrition.analyzeTranscript.useMutation();
 
   // Integrations state
   const [integrations, setIntegrations] = useState({
@@ -196,14 +203,18 @@ export default function Home() {
   const stopRecording = () => {
     if (recognitionInstance) {
       recognitionInstance.stop();
-      // Process whatever final transcript was gathered during the continuous session
+      // Give the recognition engine 600ms to flush its final result before reading state
       setTimeout(() => {
-        if (speechTranscript.trim()) {
-          processTranscript(speechTranscript);
-        } else {
-          toast.warning("No speech detected. Try speaking or using the text box!");
-        }
-      }, 500);
+        setSpeechTranscript(prev => {
+          const text = prev.trim();
+          if (text) {
+            processTranscript(text);
+          } else {
+            toast.warning("No speech detected. Try speaking or using the text box!");
+          }
+          return prev;
+        });
+      }, 600);
     } else {
       // Simulation fallback
       setIsRecording(false);
@@ -213,96 +224,78 @@ export default function Home() {
     }
   };
 
-  // Process the speech transcript to estimate nutrition and prompt clarifying questions
-  const processTranscript = (text: string) => {
-    toast.info("Clover AI Curation Engine analyzing your speech...");
+  // Process the speech transcript using real AI nutritional analysis
+  const processTranscript = async (text: string, clarificationCtx?: string) => {
+    setIsAnalyzing(true);
+    setClarifyingQuestion(null);
+    setExtractedLog(null);
+    setAiNotes(null);
+    setAiConfidence(null);
+    toast.info("Clover AI is analyzing your food description...");
 
-    setTimeout(() => {
-      const lowerText = text.toLowerCase();
-      
-      if (lowerText.includes("egg") || lowerText.includes("scramble")) {
-        setClarifyingQuestion("Clover AI: Did you use any cooking oil or butter for the eggs, or did you scramble them dry?");
+    try {
+      const result = await analyzeTranscript.mutateAsync({
+        transcript: text,
+        clarificationContext: clarificationCtx,
+        knownAllergies: profile.allergies,
+      });
+
+      setAiConfidence(result.confidence);
+      setAiNotes(result.notes);
+
+      if (result.clarifyingQuestion) {
+        // AI needs more info — show the question and hold the partial log
+        setClarifyingQuestion(result.clarifyingQuestion);
         setExtractedLog({
-          foodName: "Scrambled Eggs with Spinach & Toast",
-          quantity: "2 eggs, 1 cup spinach, 1 slice toast",
-          calories: 310,
-          protein: 18,
-          carbs: 22,
-          fat: 14,
-          allergensDetected: profile.allergies.includes("Gluten") ? ["Gluten (Toast)"] : []
+          foodName: result.foodName,
+          quantity: result.quantity,
+          calories: result.calories,
+          protein: result.protein,
+          carbs: result.carbs,
+          fat: result.fat,
+          allergensDetected: result.allergensDetected,
         });
-      } else if (lowerText.includes("almond") || lowerText.includes("apple") || lowerText.includes("snack")) {
-        setClarifyingQuestion("Clover AI: Was the apple a small, medium, or large size, and did you have about a handful of almonds?");
-        setExtractedLog({
-          foodName: "Almonds & Red Apple Snack",
-          quantity: "1 oz almonds, 1 medium apple",
-          calories: 240,
-          protein: 7,
-          carbs: 28,
-          fat: 15,
-          allergensDetected: []
-        });
-      } else if (lowerText.includes("soup") || lowerText.includes("lentil") || lowerText.includes("cracker")) {
-        setClarifyingQuestion("Clover AI: Did you have any side crackers, and what was the approximate bowl size?");
-        setExtractedLog({
-          foodName: "Lentil Soup with Crackers",
-          quantity: "1 large bowl, 5 crackers",
-          calories: 350,
-          protein: 16,
-          carbs: 48,
-          fat: 8,
-          allergensDetected: profile.allergies.includes("Gluten") ? ["Gluten (Crackers)"] : []
-        });
+        toast.info("Clover AI has a quick follow-up question for you.");
       } else {
-        // Direct logging with average defaults for any random input
+        // Confident extraction — log it directly
         const newLog: FoodLog = {
           id: `log-${Date.now()}`,
           timestamp: new Date().toISOString(),
-          rawSpeech: text,
-          foodName: text.charAt(0).toUpperCase() + text.slice(1),
-          quantity: "1 average serving",
-          calories: 250,
-          protein: 10,
-          carbs: 30,
-          fat: 8,
-          allergensDetected: []
+          rawSpeech: clarificationCtx
+            ? `${text} | Clarified: ${clarificationCtx}`
+            : text,
+          foodName: result.foodName,
+          quantity: result.quantity,
+          calories: result.calories,
+          protein: result.protein,
+          carbs: result.carbs,
+          fat: result.fat,
+          allergensDetected: result.allergensDetected,
         };
         setFoodLogs(prev => [newLog, ...prev]);
-        toast.success("Food logged successfully with average estimates!");
+
+        if (result.allergensDetected.length > 0) {
+          toast.warning(
+            `Allergen alert: ${result.allergensDetected.join(", ")} detected in this meal!`
+          );
+        } else {
+          toast.success(`Logged: ${result.foodName} — ${result.calories} kcal`);
+        }
       }
-    }, 1500);
+    } catch {
+      toast.error("AI analysis failed. Please try again or use the text input.");
+    } finally {
+      setIsAnalyzing(false);
+    }
   };
 
-  // Submit clarifying answer to adjust log
-  const submitClarifyingAnswer = () => {
-    if (!extractedLog) return;
-
-    let calorieAdjust = 0;
-    let finalQuantity = extractedLog.quantity || "";
-
-    if (clarifyingAnswer.toLowerCase().includes("butter") || clarifyingAnswer.toLowerCase().includes("oil")) {
-      calorieAdjust = 100;
-      finalQuantity += " (cooked with butter/oil)";
-    }
-
-    const newLog: FoodLog = {
-      id: `log-${Date.now()}`,
-      timestamp: new Date().toISOString(),
-      rawSpeech: speechTranscript + " | Clarified: " + clarifyingAnswer,
-      foodName: extractedLog.foodName || "Custom Meal",
-      quantity: finalQuantity,
-      calories: (extractedLog.calories || 200) + calorieAdjust,
-      protein: extractedLog.protein || 10,
-      carbs: extractedLog.carbs || 20,
-      fat: (extractedLog.fat || 5) + (calorieAdjust > 0 ? 11 : 0),
-      allergensDetected: extractedLog.allergensDetected || []
-    };
-
-    setFoodLogs(prev => [newLog, ...prev]);
-    setClarifyingQuestion(null);
+  // Submit clarifying answer — re-run AI analysis with the extra context
+  const submitClarifyingAnswer = async () => {
+    if (!clarifyingAnswer.trim()) return;
+    const ctx = clarifyingAnswer.trim();
     setClarifyingAnswer("");
-    setExtractedLog(null);
-    toast.success("Log refined and updated in your profile!");
+    setClarifyingQuestion(null);
+    await processTranscript(speechTranscript, ctx);
   };
 
   // Connect Integration simulation
@@ -839,70 +832,120 @@ export default function Home() {
                       </div>
 
                       <div className="flex gap-2 w-full">
-                        <Input 
+                        <Input
                           placeholder="e.g., I had scrambled eggs with spinach and toast"
                           value={manualTextLog}
+                          disabled={isAnalyzing}
                           onChange={e => setManualTextLog(e.target.value)}
                           onKeyDown={e => {
-                            if (e.key === "Enter" && manualTextLog.trim()) {
-                              setSpeechTranscript(manualTextLog);
-                              processTranscript(manualTextLog);
+                            if (e.key === "Enter" && manualTextLog.trim() && !isAnalyzing) {
+                              const text = manualTextLog.trim();
+                              setSpeechTranscript(text);
                               setManualTextLog("");
+                              processTranscript(text);
                             }
                           }}
                           className="text-xs bg-card"
                         />
-                        <Button 
+                        <Button
                           onClick={() => {
-                            if (manualTextLog.trim()) {
-                              setSpeechTranscript(manualTextLog);
-                              processTranscript(manualTextLog);
+                            if (manualTextLog.trim() && !isAnalyzing) {
+                              const text = manualTextLog.trim();
+                              setSpeechTranscript(text);
                               setManualTextLog("");
+                              processTranscript(text);
                             }
                           }}
+                          disabled={!manualTextLog.trim() || isAnalyzing}
                           size="sm"
                           className="text-xs"
                         >
-                          Log Food
+                          {isAnalyzing ? (
+                            <span className="flex items-center gap-1.5">
+                              <RefreshCw className="h-3 w-3 animate-spin" /> Analyzing...
+                            </span>
+                          ) : "Log Food"}
                         </Button>
                       </div>
                     </div>
                   )}
                 </Card>
 
-                {/* Speech Transcript Output & Clarifying Questions */}
+                {/* Speech Transcript Output & AI Results */}
                 {speechTranscript && (
                   <Card className="border-border/60 shadow-sm animate-in fade-in slide-in-from-bottom-5 duration-500">
                     <CardHeader className="p-5 border-b border-border/40">
                       <CardTitle className="font-serif text-sm font-bold flex items-center gap-2">
-                        <BrainCircuit className="h-5 w-5 text-primary" /> AI Curation & Transcript
+                        <BrainCircuit className="h-5 w-5 text-primary" /> AI Nutritional Analysis
+                        {aiConfidence && (
+                          <Badge
+                            variant="outline"
+                            className={`ml-auto text-[9px] uppercase tracking-wider font-mono ${
+                              aiConfidence === "high"
+                                ? "border-emerald-300 text-emerald-700 bg-emerald-50"
+                                : aiConfidence === "medium"
+                                ? "border-amber-300 text-amber-700 bg-amber-50"
+                                : "border-red-300 text-red-700 bg-red-50"
+                            }`}
+                          >
+                            {aiConfidence} confidence
+                          </Badge>
+                        )}
                       </CardTitle>
                     </CardHeader>
-                    <CardContent className="p-5 space-y-6">
+                    <CardContent className="p-5 space-y-4">
+                      {/* Transcript quote */}
                       <div className="p-4 bg-muted/30 rounded-lg border border-border/40 text-xs italic text-muted-foreground">
                         "{speechTranscript}"
                       </div>
 
-                      {/* Clarifying Questions */}
-                      {clarifyingQuestion ? (
+                      {/* AI loading state */}
+                      {isAnalyzing && (
+                        <div className="flex items-center gap-3 text-xs text-primary p-3 bg-primary/5 border border-primary/10 rounded-lg animate-pulse">
+                          <RefreshCw className="h-4 w-4 animate-spin shrink-0" />
+                          Clover AI is analyzing your food description using USDA nutritional data...
+                        </div>
+                      )}
+
+                      {/* Clarifying question from AI */}
+                      {!isAnalyzing && clarifyingQuestion && (
                         <div className="space-y-3 p-4 bg-primary/5 border border-primary/10 rounded-lg">
                           <h4 className="text-xs font-bold text-primary flex items-center gap-1.5">
-                            <Sparkles className="h-3.5 w-3.5" /> Clarifying Question
+                            <Sparkles className="h-3.5 w-3.5" /> Clover AI needs a bit more info
                           </h4>
                           <p className="text-xs text-foreground leading-relaxed">{clarifyingQuestion}</p>
                           <div className="flex gap-2">
-                            <Input 
-                              placeholder="Type your answer (e.g. cooked with butter)" 
+                            <Input
+                              placeholder="Type your answer (e.g. cooked with butter)"
                               value={clarifyingAnswer}
                               onChange={e => setClarifyingAnswer(e.target.value)}
+                              onKeyDown={e => { if (e.key === "Enter") submitClarifyingAnswer(); }}
                               className="text-xs bg-card"
                             />
-                            <Button onClick={submitClarifyingAnswer} size="sm" className="text-xs">Submit</Button>
+                            <Button
+                              onClick={submitClarifyingAnswer}
+                              disabled={!clarifyingAnswer.trim() || isAnalyzing}
+                              size="sm"
+                              className="text-xs"
+                            >
+                              Submit
+                            </Button>
                           </div>
                         </div>
-                      ) : (
+                      )}
+
+                      {/* Success state */}
+                      {!isAnalyzing && !clarifyingQuestion && extractedLog === null && speechTranscript && (
                         <div className="flex items-center gap-2 text-xs text-emerald-600 font-semibold bg-emerald-50 border border-emerald-100 p-3 rounded-lg">
-                          <Check className="h-4 w-4 shrink-0" /> Automatically parsed and logged to your profile!
+                          <Check className="h-4 w-4 shrink-0" /> Logged by Clover AI — check your dashboard!
+                        </div>
+                      )}
+
+                      {/* AI nutritional note */}
+                      {!isAnalyzing && aiNotes && (
+                        <div className="flex gap-2 items-start text-xs text-muted-foreground bg-muted/30 border border-border/40 p-3 rounded-lg">
+                          <Sparkles className="h-3.5 w-3.5 text-primary shrink-0 mt-0.5" />
+                          <p className="leading-relaxed">{aiNotes}</p>
                         </div>
                       )}
                     </CardContent>
