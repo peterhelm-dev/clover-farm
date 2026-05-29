@@ -9,9 +9,9 @@ export default function NotFound() {
       <div className="h-16 w-16 bg-primary/10 text-primary rounded-full flex items-center justify-center mb-6">
         <Leaf className="h-8 w-8 animate-bounce" />
       </div>
-      <h1 className="text-4xl font-bold font-serif text-foreground mb-2">404 - Harvest Not Found</h1>
+      <h1 className="text-4xl font-bold font-serif text-foreground mb-2">404 - Page Not Found</h1>
       <p className="text-sm text-muted-foreground max-w-md mb-6">
-        The coordination page or harvest resource you are looking for has been moved or is currently out of season.
+        The seasonal planning resource or recipe you are looking for has been moved or is currently out of season.
       </p>
       <Link href="/">
         <Button>Return to Home</Button>

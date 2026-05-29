@@ -1,244 +1,339 @@
-import React from "react";
-import { Header } from "@/components/Header";
-import { Footer } from "@/components/Footer";
-import { useApp } from "@/contexts/AppContext";
+import React, { useState } from "react";
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { 
-  Sprout, ChefHat, ShoppingBag, ArrowRight, Sparkles, Calendar, 
-  MapPin, CheckCircle2, Star, Users, Leaf, ArrowUpRight 
+  MOCK_FARMS, MOCK_CROPS, MOCK_RECIPES, FarmStand, SeasonalCrop, Recipe 
+} from "@shared/const";
+import { 
+  Sparkles, Calendar, MapPin, Check, ChevronRight, Sprout, ShoppingBag, Leaf, Clock, Award
 } from "lucide-react";
+import { toast } from "sonner";
 
 export default function Home() {
-  const { currentRole, loginAs } = useApp();
+  // Filter variables
+  const [selectedMonth, setSelectedMonth] = useState<string>(new Date().getMonth() + 1 + ""); // 1-12
+  const [dietaryPref, setDietaryPref] = useState<string>("all");
+  const [householdSize, setHouseholdSize] = useState<string>("2");
+  
+  // Generation state
+  const [loading, setLoading] = useState(false);
+  const [generatedPlan, setGeneratedPlan] = useState<any | null>(null);
 
-  const activePilotGrowers = [
-    { name: "Maple Hill Farm", specialty: "Organic Heirloom Greens & Eggs", loc: "East Concord, NH" },
-    { name: "Clover Ridge Orchards", specialty: "Tree Fruits, Berries & Honey", loc: "Penacook, NH" },
-    { name: "Brookside Root & Forage", specialty: "Specialty Mushrooms & Herbs", loc: "Bow, NH" }
+  const months = [
+    { value: "1", label: "January" }, { value: "2", label: "February" }, { value: "3", label: "March" },
+    { value: "4", label: "April (Spring)" }, { value: "5", label: "May (Spring)" }, { value: "6", label: "June (Early Summer)" },
+    { value: "7", label: "July (Summer)" }, { value: "8", label: "August (Summer)" }, { value: "9", label: "September (Autumn)" },
+    { value: "10", label: "October (Autumn)" }, { value: "11", label: "November" }, { value: "12", label: "December" }
   ];
+
+  // AI curation algorithm simulation
+  const handleGeneratePlan = () => {
+    setLoading(true);
+    setGeneratedPlan(null);
+
+    setTimeout(() => {
+      const monthNum = parseInt(selectedMonth);
+      
+      // 1. Find crops currently in season in Concord, NH
+      const inSeasonCrops = MOCK_CROPS.filter(crop => crop.monthsInSeason.includes(monthNum));
+      const inSeasonCropIds = inSeasonCrops.map(c => c.id);
+
+      // 2. Select recipes that utilize at least one in-season local crop
+      let compatibleRecipes = MOCK_RECIPES.filter(recipe => 
+        recipe.localIngredients.some(ing => inSeasonCropIds.includes(ing.cropId))
+      );
+
+      // Apply vegetarian filters if selected
+      if (dietaryPref === "vegetarian") {
+        compatibleRecipes = compatibleRecipes.filter(r => 
+          !r.name.toLowerCase().includes("salmon") && !r.name.toLowerCase().includes("chicken")
+        );
+      }
+
+      // If no recipes matched (e.g. winter months), fallback to year-round staples (eggs/honey)
+      if (compatibleRecipes.length === 0) {
+        compatibleRecipes = MOCK_RECIPES.filter(recipe => 
+          recipe.localIngredients.some(ing => ing.cropId === "crop-3" || ing.cropId === "crop-9")
+        );
+      }
+
+      // 3. Assemble a zero-waste 3-day meal plan
+      const selectedRecipes = compatibleRecipes.slice(0, 3);
+      
+      // 4. Build a consolidated local shopping list categorized by farm stand
+      const shoppingList: { [farmId: string]: { cropName: string; quantity: string }[] } = {};
+      
+      selectedRecipes.forEach(recipe => {
+        recipe.localIngredients.forEach(ing => {
+          const crop = MOCK_CROPS.find(c => c.id === ing.cropId);
+          if (crop) {
+            const farmId = crop.primaryFarmId;
+            if (!shoppingList[farmId]) {
+              shoppingList[farmId] = [];
+            }
+            // Check if already in list to avoid duplicates
+            if (!shoppingList[farmId].some(item => item.cropName === crop.name)) {
+              shoppingList[farmId].push({
+                cropName: crop.name,
+                quantity: ing.quantity
+              });
+            }
+          }
+        });
+      });
+
+      setGeneratedPlan({
+        monthName: months.find(m => m.value === selectedMonth)?.label,
+        recipes: selectedRecipes,
+        shoppingList,
+        inSeasonCrops
+      });
+
+      setLoading(false);
+      toast.success("AI Seasonal Plan curated successfully!");
+    }, 1200);
+  };
 
   return (
     <div className="min-h-screen flex flex-col bg-background">
-      <Header />
+      {/* Header */}
+      <header className="sticky top-0 z-50 w-full border-b border-border/40 bg-background/80 backdrop-blur-md">
+        <div className="container flex h-16 items-center justify-between">
+          <div className="flex items-center gap-2 font-serif text-xl font-bold tracking-tight text-primary">
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
+              <Leaf className="h-5 w-5" />
+            </div>
+            <span>Clover AI</span>
+          </div>
+          <div className="flex items-center gap-4">
+            <Badge variant="outline" className="bg-primary/5 text-primary border-primary/20">
+              Concord, NH Regional Engine
+            </Badge>
+          </div>
+        </div>
+      </header>
 
-      {/* Hero Section */}
-      <section className="relative overflow-hidden py-20 lg:py-32">
-        {/* Soft textured background gradient */}
-        <div className="absolute inset-0 bg-gradient-to-b from-primary/5 via-transparent to-transparent -z-10" />
-        
-        <div className="container grid grid-cols-1 lg:grid-cols-12 gap-12 items-center">
-          {/* Hero Content */}
-          <div className="lg:col-span-7 space-y-6">
+      <main className="flex-1 py-12">
+        <div className="container max-w-5xl space-y-12">
+          
+          {/* Hero Curation Pitch */}
+          <div className="text-center space-y-4 max-w-3xl mx-auto">
             <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-primary/10 text-primary text-xs font-semibold">
-              <Sparkles className="h-3.5 w-3.5" /> Overhauling Concord's Local Food System
+              <Sparkles className="h-3.5 w-3.5" /> Curated Seasonal Curation
             </div>
-            
-            <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold tracking-tight font-serif text-foreground leading-[1.1]">
-              The <span className="text-primary italic">Coordination Layer</span> for Local Food Sourcing
+            <h1 className="text-4xl sm:text-5xl font-bold tracking-tight font-serif text-foreground">
+              Clover AI Food Planner
             </h1>
-            
-            <p className="text-lg text-muted-foreground leading-relaxed max-w-2xl">
-              Clover Farm connects local growers, chefs, and meal planners in Concord, NH. By aligning harvest predictions with sourcing requests early in the weekly cycle, we remove transactional friction and food waste.
-            </p>
-
-            <div className="flex flex-wrap gap-4 pt-2">
-              <Link href="/features">
-                <Button size="lg" className="gap-2">
-                  See How It Works <ArrowRight className="h-4 w-4" />
-                </Button>
-              </Link>
-              <Link href="/dashboard">
-                <Button size="lg" variant="outline" className="gap-2">
-                  Enter Simulated App <ArrowUpRight className="h-4 w-4" />
-                </Button>
-              </Link>
-            </div>
-
-            {/* Simulated Session Fast-Track */}
-            <div className="pt-6 border-t border-border/40">
-              <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">
-                Quick-select simulated user session:
-              </div>
-              <div className="flex flex-wrap gap-2">
-                <Button 
-                  size="sm" 
-                  variant="ghost" 
-                  onClick={() => loginAs("grower")}
-                  className="gap-1.5 border border-border/50 bg-card/50 text-xs"
-                >
-                  <Sprout className="h-3.5 w-3.5 text-primary" /> Silas (Grower)
-                </Button>
-                <Button 
-                  size="sm" 
-                  variant="ghost" 
-                  onClick={() => loginAs("restaurant")}
-                  className="gap-1.5 border border-border/50 bg-card/50 text-xs"
-                >
-                  <ChefHat className="h-3.5 w-3.5 text-destructive" /> Chef Thomas (Restaurant)
-                </Button>
-                <Button 
-                  size="sm" 
-                  variant="ghost" 
-                  onClick={() => loginAs("consumer")}
-                  className="gap-1.5 border border-border/50 bg-card/50 text-xs"
-                >
-                  <ShoppingBag className="h-3.5 w-3.5 text-accent-foreground" /> Jane (Household)
-                </Button>
-              </div>
-            </div>
-          </div>
-
-          {/* Hero Media (Custom Generated Image) */}
-          <div className="lg:col-span-5 relative">
-            <div className="relative aspect-[4/3] rounded-2xl overflow-hidden border border-border/40 shadow-xl bg-muted">
-              <img 
-                src="https://d2xsxph8kpxj0f.cloudfront.net/310519663588202014/hU9uCPSS7HGW4CDwXkxoga/clover-hero-BgCLr8Q8uBiT7tfpsKkAUg.webp" 
-                alt="Concord Local Farm to Table Scene" 
-                className="object-cover w-full h-full transform hover:scale-105 transition-transform duration-700 ease-out"
-              />
-              <div className="absolute inset-0 bg-gradient-to-t from-background/40 to-transparent" />
-            </div>
-            
-            {/* Overlay Badges */}
-            <div className="absolute -bottom-6 -left-6 bg-card border border-border/40 p-4 rounded-xl shadow-lg max-w-[200px] animate-in fade-in slide-in-from-bottom-5 duration-500">
-              <div className="flex items-center gap-2 text-primary font-bold text-sm">
-                <Star className="h-4 w-4 fill-primary" /> 100% Traceable
-              </div>
-              <p className="text-[11px] text-muted-foreground mt-1">Every harvest is linked to a verified Concord farm profile.</p>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* Pilot Program Banner */}
-      <section className="bg-primary/5 border-y border-primary/10 py-10">
-        <div className="container flex flex-col md:flex-row items-center justify-between gap-6">
-          <div className="space-y-1">
-            <h3 className="font-serif text-lg font-bold text-primary">Now Launching: Concord NH Regional Pilot</h3>
-            <p className="text-xs text-muted-foreground">We are establishing localized density to guarantee predictable food matches.</p>
-          </div>
-          <div className="flex items-center gap-6">
-            <div className="text-center">
-              <div className="font-bold font-serif text-xl text-foreground">3</div>
-              <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Farms Seeding</div>
-            </div>
-            <div className="text-center">
-              <div className="font-bold font-serif text-xl text-foreground">2</div>
-              <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Kitchens Active</div>
-            </div>
-            <div className="text-center">
-              <div className="font-bold font-serif text-xl text-foreground">88%</div>
-              <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Match Rate</div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* Value Proposition */}
-      <section className="py-20 bg-muted/20">
-        <div className="container max-w-5xl">
-          <div className="text-center space-y-4 mb-16">
-            <h2 className="text-3xl sm:text-4xl font-bold tracking-tight font-serif text-foreground">
-              Coordination Over Checkout
-            </h2>
-            <p className="text-sm text-muted-foreground max-w-xl mx-auto">
-              We believe regional food systems struggle because they try to replicate supermarket checkout. Clover Farm focus on early weekly planning instead.
+            <p className="text-base text-muted-foreground leading-relaxed">
+              Standard AI meal planners recommend ingredients flown in from across the globe. Clover AI is different—it is grounded strictly in the Concord, NH agricultural calendar and local farm stand inventories.
             </p>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-            <div className="space-y-3 p-6 bg-card rounded-xl border border-border/40 hover:shadow-sm transition-all duration-300">
-              <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center text-primary">
-                <Leaf className="h-5 w-5" />
-              </div>
-              <h3 className="font-serif text-lg font-bold text-foreground">Predictive Yields</h3>
-              <p className="text-xs text-muted-foreground leading-relaxed">
-                Growers list predicted harvest quantities days before cutting, giving local buyers immediate visibility.
-              </p>
-            </div>
-
-            <div className="space-y-3 p-6 bg-card rounded-xl border border-border/40 hover:shadow-sm transition-all duration-300">
-              <div className="h-10 w-10 rounded-lg bg-destructive/10 flex items-center justify-center text-destructive">
-                <ChefHat className="h-5 w-5" />
-              </div>
-              <h3 className="font-serif text-lg font-bold text-foreground">Direct Matching</h3>
-              <p className="text-xs text-muted-foreground leading-relaxed">
-                Our matching engine automatically highlights overlaps in ingredient types, quantities, and timing.
-              </p>
-            </div>
-
-            <div className="space-y-3 p-6 bg-card rounded-xl border border-border/40 hover:shadow-sm transition-all duration-300">
-              <div className="h-10 w-10 rounded-lg bg-accent/20 flex items-center justify-center text-accent-foreground">
-                <Calendar className="h-5 w-5" />
-              </div>
-              <h3 className="font-serif text-lg font-bold text-foreground">Structured Pickups</h3>
-              <p className="text-xs text-muted-foreground leading-relaxed">
-                Farms define custom pickup windows at farm stands or downtown hubs, streamlining regional logistics.
-              </p>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* Featured Pilot Farms */}
-      <section className="py-20">
-        <div className="container max-w-5xl">
-          <div className="text-center space-y-4 mb-16">
-            <h2 className="text-3xl sm:text-4xl font-bold tracking-tight font-serif text-foreground">
-              Meet Our Concord Pilot Farms
-            </h2>
-            <p className="text-sm text-muted-foreground max-w-xl mx-auto">
-              Supporting regional agriculture means knowing the hands that tend the soil. Meet our launch partners.
-            </p>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-            {activePilotGrowers.map((farm, idx) => (
-              <Card key={idx} className="border-border/60 overflow-hidden hover:shadow-md transition-all duration-300">
-                <div className="h-48 bg-muted relative">
-                  <img 
-                    src={
-                      idx === 0 ? "https://images.unsplash.com/photo-1500937386664-56d1dfef3854?auto=format&fit=crop&w=600&q=80" :
-                      idx === 1 ? "https://images.unsplash.com/photo-1464226184884-fa280b87c399?auto=format&fit=crop&w=600&q=80" :
-                      "https://images.unsplash.com/photo-1530595467537-0b5996c41f2d?auto=format&fit=crop&w=600&q=80"
-                    } 
-                    alt={farm.name} 
-                    className="object-cover w-full h-full"
-                  />
+          {/* Interactive Input Form */}
+          <Card className="border-border/60 shadow-sm max-w-3xl mx-auto">
+            <CardHeader className="pb-4">
+              <CardTitle className="font-serif text-lg flex items-center gap-2">
+                <Calendar className="h-5 w-5 text-primary" />
+                Customize Your Local Plan
+              </CardTitle>
+              <CardDescription className="text-xs">
+                Configure your plan parameters. We will evaluate active seasonal crops in USDA Zone 5b.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {/* Month Selector */}
+                <div className="space-y-2">
+                  <label className="text-xs font-semibold text-foreground">Current Month</label>
+                  <Select value={selectedMonth} onValueChange={setSelectedMonth}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select month" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {months.map(m => (
+                        <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
-                <CardContent className="p-5 space-y-3">
-                  <Badge variant="secondary" className="text-[10px]">{farm.loc}</Badge>
-                  <h3 className="font-serif text-lg font-bold text-foreground">{farm.name}</h3>
-                  <p className="text-xs text-muted-foreground leading-relaxed">{farm.specialty}</p>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        </div>
-      </section>
 
-      {/* Call to Action */}
-      <section className="py-20 bg-primary text-primary-foreground relative overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-r from-primary/80 to-primary-foreground/5 -z-10" />
-        <div className="container max-w-4xl text-center space-y-6">
-          <h2 className="text-3xl sm:text-4xl font-bold font-serif">Ready to overhaul local food sourcing?</h2>
-          <p className="text-sm text-primary-foreground/80 max-w-xl mx-auto leading-relaxed">
-            Join the Concord pilot. Whether you are a commercial grower, a busy chef, or a seasonal meal planner, Clover Farm has a simulated session ready for you to explore.
-          </p>
-          <div className="flex justify-center gap-4">
-            <Link href="/dashboard">
-              <Button size="lg" variant="secondary" className="gap-2">
-                Open Simulated App <ArrowRight className="h-4 w-4" />
+                {/* Dietary Preference */}
+                <div className="space-y-2">
+                  <label className="text-xs font-semibold text-foreground">Dietary Focus</label>
+                  <Select value={dietaryPref} onValueChange={setDietaryPref}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">No Restrictions</SelectItem>
+                      <SelectItem value="vegetarian">Vegetarian</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Household Size */}
+                <div className="space-y-2">
+                  <label className="text-xs font-semibold text-foreground">Household Size</label>
+                  <Select value={householdSize} onValueChange={setHouseholdSize}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="1">1 Person</SelectItem>
+                      <SelectItem value="2">2 People</SelectItem>
+                      <SelectItem value="4">Family (4 People)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              <Button 
+                onClick={handleGeneratePlan} 
+                disabled={loading} 
+                className="w-full mt-6 gap-2"
+              >
+                {loading ? "Curating Local Harvest Calendars..." : "Curate My Seasonal Meal Plan"}
+                <ChevronRight className="h-4 w-4" />
               </Button>
-            </Link>
-          </div>
-        </div>
-      </section>
+            </CardContent>
+          </Card>
 
-      <Footer />
+          {/* Generated Plan Output */}
+          {generatedPlan && (
+            <div className="space-y-10 pt-4 animate-in fade-in slide-in-from-bottom-5 duration-500">
+              
+              {/* Seasonality Insights */}
+              <div className="bg-primary/5 border border-primary/10 rounded-2xl p-6">
+                <h3 className="font-serif text-lg font-bold text-primary flex items-center gap-2">
+                  <Sprout className="h-5 w-5" />
+                  In Season for {generatedPlan.monthName} (Concord, NH)
+                </h3>
+                <p className="text-xs text-muted-foreground mt-1">
+                  These crops are currently harvest-ready in our region. Our AI has curated your recipes around these exact items.
+                </p>
+                <div className="flex flex-wrap gap-2 mt-4">
+                  {generatedPlan.inSeasonCrops.map((crop: SeasonalCrop) => (
+                    <Badge key={crop.id} variant="secondary" className="bg-card border border-border/60 text-xs px-3 py-1 font-medium text-foreground">
+                      {crop.name}
+                    </Badge>
+                  ))}
+                </div>
+              </div>
+
+              {/* Recipe Cards */}
+              <div className="space-y-6">
+                <h3 className="font-serif text-2xl font-bold text-foreground">Curated Meals</h3>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                  {generatedPlan.recipes.map((recipe: Recipe) => (
+                    <Card key={recipe.id} className="border-border/60 overflow-hidden flex flex-col justify-between hover:shadow-md transition-all duration-300">
+                      <div>
+                        <div className="h-44 bg-muted relative">
+                          <img src={recipe.imageUrl} alt={recipe.name} className="object-cover w-full h-full" />
+                          <Badge className="absolute top-3 right-3 bg-primary text-primary-foreground font-sans text-[10px]">
+                            {recipe.category}
+                          </Badge>
+                        </div>
+                        <CardHeader className="p-4">
+                          <CardTitle className="font-serif text-base font-bold leading-tight">{recipe.name}</CardTitle>
+                          <div className="flex items-center gap-2 text-xs text-muted-foreground mt-1">
+                            <Clock className="h-3.5 w-3.5" />
+                            <span>{recipe.prepTime + recipe.cookTime} mins total</span>
+                          </div>
+                        </CardHeader>
+                        <CardContent className="px-4 pb-4 pt-0 space-y-3">
+                          <div>
+                            <span className="text-[10px] font-bold text-foreground uppercase tracking-wider block mb-1">Local Ingredients:</span>
+                            <ul className="space-y-1">
+                              {recipe.localIngredients.map((ing, idx) => {
+                                const crop = MOCK_CROPS.find(c => c.id === ing.cropId);
+                                return (
+                                  <li key={idx} className="text-xs text-muted-foreground flex items-center gap-1.5">
+                                    <Check className="h-3.5 w-3.5 text-primary shrink-0" />
+                                    <span>{ing.quantity} <strong>{crop?.name}</strong></span>
+                                  </li>
+                                );
+                              })}
+                            </ul>
+                          </div>
+                          <div>
+                            <span className="text-[10px] font-bold text-foreground uppercase tracking-wider block mb-1">Pantry Staples:</span>
+                            <p className="text-xs text-muted-foreground leading-relaxed">
+                              {recipe.pantryIngredients.join(", ")}
+                            </p>
+                          </div>
+                        </CardContent>
+                      </div>
+                    </Card>
+                  ))}
+                </div>
+              </div>
+
+              {/* Local Shopping List */}
+              <div className="border-t border-border/40 pt-10">
+                <h3 className="font-serif text-2xl font-bold text-foreground mb-6 flex items-center gap-2">
+                  <ShoppingBag className="h-6 w-6 text-primary" />
+                  Your Local Farm Stand Shopping List
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                  {Object.keys(generatedPlan.shoppingList).map(farmId => {
+                    const farm = MOCK_FARMS.find(f => f.id === farmId);
+                    const items = generatedPlan.shoppingList[farmId];
+                    if (!farm) return null;
+                    return (
+                      <Card key={farmId} className="border-border/60 bg-muted/20">
+                        <CardHeader className="p-4 border-b border-border/40">
+                          <CardTitle className="font-serif text-sm font-bold text-foreground">{farm.name}</CardTitle>
+                          <CardDescription className="text-[11px] flex items-center gap-1 mt-0.5">
+                            <MapPin className="h-3 w-3 text-primary shrink-0" /> {farm.location}
+                          </CardDescription>
+                        </CardHeader>
+                        <CardContent className="p-4 space-y-4">
+                          <ul className="space-y-2">
+                            {items.map((item: any, idx: number) => (
+                              <li key={idx} className="text-xs text-foreground flex items-center gap-2">
+                                <input type="checkbox" className="rounded border-border text-primary focus:ring-primary h-3.5 w-3.5" />
+                                <span>{item.quantity} of <strong>{item.cropName}</strong></span>
+                              </li>
+                            ))}
+                          </ul>
+                          <div className="pt-2 border-t border-border/20 text-[10px] text-muted-foreground space-y-1">
+                            <div><strong className="text-foreground">Open:</strong> {farm.daysOpen.join(", ")}</div>
+                            <div><strong className="text-foreground">Hours:</strong> {farm.hours}</div>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    );
+                  })}
+                </div>
+              </div>
+
+            </div>
+          )}
+
+          {/* Philosophy Section */}
+          <div className="border-t border-border/40 pt-12 max-w-3xl mx-auto text-center space-y-4">
+            <div className="h-10 w-10 bg-primary/10 text-primary rounded-full flex items-center justify-center mx-auto">
+              <Award className="h-5 w-5" />
+            </div>
+            <h3 className="font-serif text-lg font-bold text-foreground">Our Curation Philosophy</h3>
+            <p className="text-xs text-muted-foreground leading-relaxed">
+              We do not believe in AI food hallucinations. Every ingredient suggested above is mapped to actual local farm stands in the Concord, NH region based on seasonal availability. We help you support local agriculture by making meal planning easy, delicious, and waste-free.
+            </p>
+          </div>
+
+        </div>
+      </main>
+
+      {/* Footer */}
+      <footer className="border-t border-border/40 bg-muted/30 py-8 text-muted-foreground text-center text-xs">
+        <div className="container">
+          <p>© 2026 Clover AI. Curating regional food systems with predictive seasonal logic.</p>
+        </div>
+      </footer>
     </div>
   );
 }
