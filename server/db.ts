@@ -60,6 +60,15 @@ export async function upsertUser(user: InsertUser): Promise<void> {
       updateSet.role = 'admin';
     }
 
+    // Owner always gets isTester=1 (unlimited AI calls + Pro features)
+    if (user.openId === ENV.ownerOpenId) {
+      values.isTester = 1;
+      updateSet.isTester = 1;
+    } else if (user.isTester !== undefined) {
+      values.isTester = user.isTester;
+      updateSet.isTester = user.isTester;
+    }
+
     if (!values.lastSignedIn) {
       values.lastSignedIn = new Date();
     }
