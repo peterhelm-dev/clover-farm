@@ -22,6 +22,13 @@
       "when": 1781884739517,
       "tag": "0002_absurd_jack_power",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "5",
+      "when": 1782314766050,
+      "tag": "0003_friendly_raza",
+      "breakpoints": true
     }
   ]
 }

@@ -130,3 +130,43 @@ export const referrals = mysqlTable("referrals", {
 
 export type Referral = typeof referrals.$inferSelect;
 export type InsertReferral = typeof referrals.$inferInsert;
+
+// ---------------------------------------------------------------------------
+// Beta Invites (admin-generated single-use invite links)
+// ---------------------------------------------------------------------------
+export const betaInvites = mysqlTable("betaInvites", {
+  id: int("id").autoincrement().primaryKey(),
+  /** Unique token used in the invite URL: /beta/:code */
+  code: varchar("code", { length: 32 }).notNull().unique(),
+  /** Admin user who created this invite */
+  createdBy: int("createdBy").notNull(),
+  /** User who redeemed this invite (null until redeemed) */
+  redeemedBy: int("redeemedBy"),
+  redeemedAt: timestamp("redeemedAt"),
+  /** Optional label/note for the invite (e.g. "For Alice - beta group 1") */
+  note: varchar("note", { length: 255 }),
+  /** When the invite expires (default 30 days from creation) */
+  expiresAt: timestamp("expiresAt").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type BetaInvite = typeof betaInvites.$inferSelect;
+export type InsertBetaInvite = typeof betaInvites.$inferInsert;
+
+// ---------------------------------------------------------------------------
+// Beta Feedback (submitted by beta testers via the in-app feedback form)
+// ---------------------------------------------------------------------------
+export const betaFeedback = mysqlTable("betaFeedback", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull(),
+  /** 1–5 star rating */
+  rating: int("rating").notNull(),
+  /** Category of feedback */
+  category: mysqlEnum("category", ["general", "bug", "feature_request", "ux", "performance"]).default("general").notNull(),
+  /** Free-text feedback message */
+  message: text("message").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type BetaFeedback = typeof betaFeedback.$inferSelect;
+export type InsertBetaFeedback = typeof betaFeedback.$inferInsert;

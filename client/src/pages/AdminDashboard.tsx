@@ -32,9 +32,14 @@ import {
   ChevronRight,
   Shield,
   Crown,
+  Link2,
+  Star,
+  Copy,
+  Check,
+  MessageSquarePlus,
 } from "lucide-react";
 
-type Tab = "overview" | "users" | "waitlist" | "referrals";
+type Tab = "overview" | "users" | "waitlist" | "referrals" | "beta_invites" | "beta_feedback";
 
 export default function AdminDashboard() {
   const { user, loading, isAuthenticated } = useAuth();
@@ -68,7 +73,7 @@ export default function AdminDashboard() {
       <div className="bg-white border-b border-gray-200">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <nav className="flex gap-1 -mb-px">
-            {(["overview", "users", "waitlist", "referrals"] as Tab[]).map((tab) => (
+            {(["overview", "users", "waitlist", "referrals", "beta_invites", "beta_feedback"] as Tab[]).map((tab) => (
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
@@ -78,7 +83,7 @@ export default function AdminDashboard() {
                     : "border-transparent text-gray-500 hover:text-gray-700"
                 }`}
               >
-                {tab}
+                {tab.replace("_", " ")}
               </button>
             ))}
           </nav>
@@ -94,6 +99,8 @@ export default function AdminDashboard() {
           <WaitlistTab page={waitlistPage} onPageChange={setWaitlistPage} />
         )}
         {activeTab === "referrals" && <ReferralsTab />}
+        {activeTab === "beta_invites" && <BetaInvitesTab />}
+        {activeTab === "beta_feedback" && <BetaFeedbackTab />}
       </main>
     </div>
   );
@@ -422,6 +429,298 @@ function ReferralsTab() {
                   ))}
             </TableBody>
           </Table>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Beta Invites tab
+// ---------------------------------------------------------------------------
+function BetaInvitesTab() {
+  const { data: invites, isLoading, refetch } = trpc.beta.listInvites.useQuery();
+  const { data: stats } = trpc.beta.getStats.useQuery();
+  const [note, setNote] = useState("");
+  const [copiedCode, setCopiedCode] = useState<string | null>(null);
+
+  const createInvite = trpc.beta.createInvite.useMutation({
+    onSuccess: () => {
+      toast.success("Beta invite created!");
+      setNote("");
+      refetch();
+    },
+    onError: (err) => toast.error(err.message),
+  });
+
+  const handleCreate = () => {
+    createInvite.mutate({ note: note || undefined, origin: window.location.origin });
+  };
+
+  const copyLink = (code: string) => {
+    navigator.clipboard.writeText(`${window.location.origin}/beta/${code}`);
+    setCopiedCode(code);
+    setTimeout(() => setCopiedCode(null), 2000);
+  };
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-6">
+        <h2 className="text-xl font-semibold text-gray-900">
+          Beta Invites ({invites?.length ?? "…"})
+        </h2>
+        {stats && (
+          <span className="text-sm text-gray-500">
+            {stats.redeemedInvites} redeemed · {stats.pendingInvites} pending
+          </span>
+        )}
+      </div>
+
+      {/* Create invite */}
+      <Card className="mb-6">
+        <CardHeader>
+          <CardTitle className="text-base">Generate New Invite Link</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="flex gap-3">
+            <input
+              type="text"
+              placeholder="Optional note (e.g. 'For Alice — beta group 1')"
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              className="flex-1 h-9 rounded-md border border-gray-200 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              maxLength={255}
+            />
+            <Button
+              onClick={handleCreate}
+              disabled={createInvite.isPending}
+              className="bg-emerald-600 hover:bg-emerald-700 text-white"
+            >
+              <Link2 className="w-4 h-4 mr-2" />
+              {createInvite.isPending ? "Creating…" : "Create Invite"}
+            </Button>
+          </div>
+          <p className="text-xs text-gray-400 mt-2">
+            Invite links expire 30 days after creation and grant unlimited Pro access.
+          </p>
+        </CardContent>
+      </Card>
+
+      {/* Invites table */}
+      <Card>
+        <CardContent className="p-0">
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Code</TableHead>
+                  <TableHead>Note</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Redeemed By</TableHead>
+                  <TableHead>Expires</TableHead>
+                  <TableHead>Copy Link</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {isLoading
+                  ? Array.from({ length: 5 }).map((_, i) => (
+                      <TableRow key={i}>
+                        {Array.from({ length: 6 }).map((__, j) => (
+                          <TableCell key={j}>
+                            <div className="h-4 bg-gray-100 rounded animate-pulse w-20" />
+                          </TableCell>
+                        ))}
+                      </TableRow>
+                    ))
+                  : invites?.length === 0
+                  ? (
+                      <TableRow>
+                        <TableCell colSpan={6} className="text-center py-12 text-gray-400">
+                          <Link2 className="w-8 h-8 mx-auto mb-2 opacity-30" />
+                          <p>No invites yet. Create your first one above.</p>
+                        </TableCell>
+                      </TableRow>
+                    )
+                  : invites?.map((inv) => {
+                      const isRedeemed = !!inv.redeemedAt;
+                      const isExpired = !isRedeemed && new Date(inv.expiresAt) < new Date();
+                      return (
+                        <TableRow key={inv.id}>
+                          <TableCell>
+                            <code className="text-xs bg-gray-100 px-2 py-0.5 rounded font-mono">
+                              {inv.code}
+                            </code>
+                          </TableCell>
+                          <TableCell className="text-sm text-gray-600">
+                            {inv.note ?? <span className="text-gray-300">—</span>}
+                          </TableCell>
+                          <TableCell>
+                            <Badge
+                              variant="outline"
+                              className={
+                                isRedeemed
+                                  ? "border-green-400 text-green-700"
+                                  : isExpired
+                                  ? "border-red-300 text-red-600"
+                                  : "border-blue-300 text-blue-700"
+                              }
+                            >
+                              {isRedeemed ? "Redeemed" : isExpired ? "Expired" : "Active"}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>
+                            {inv.redeemedByName ? (
+                              <div>
+                                <p className="text-sm font-medium">{inv.redeemedByName}</p>
+                                <p className="text-xs text-gray-400">{inv.redeemedByEmail}</p>
+                              </div>
+                            ) : (
+                              <span className="text-gray-300 text-sm">—</span>
+                            )}
+                          </TableCell>
+                          <TableCell className="text-sm text-gray-500">
+                            {new Date(inv.expiresAt).toLocaleDateString()}
+                          </TableCell>
+                          <TableCell>
+                            {!isRedeemed && !isExpired && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-7 text-xs"
+                                onClick={() => copyLink(inv.code)}
+                              >
+                                {copiedCode === inv.code ? (
+                                  <><Check className="w-3 h-3 mr-1 text-green-600" /> Copied!</>
+                                ) : (
+                                  <><Copy className="w-3 h-3 mr-1" /> Copy</>
+                                )}
+                              </Button>
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+              </TableBody>
+            </Table>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Beta Feedback tab
+// ---------------------------------------------------------------------------
+const CATEGORY_LABELS: Record<string, string> = {
+  general: "General",
+  bug: "Bug",
+  feature_request: "Feature Request",
+  ux: "UX / Design",
+  performance: "Performance",
+};
+
+const CATEGORY_COLORS: Record<string, string> = {
+  general: "bg-gray-100 text-gray-700",
+  bug: "bg-red-100 text-red-700",
+  feature_request: "bg-blue-100 text-blue-700",
+  ux: "bg-purple-100 text-purple-700",
+  performance: "bg-amber-100 text-amber-700",
+};
+
+function BetaFeedbackTab() {
+  const { data: feedback, isLoading } = trpc.beta.listFeedback.useQuery();
+  const { data: stats } = trpc.beta.getStats.useQuery();
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-6">
+        <h2 className="text-xl font-semibold text-gray-900">
+          Beta Feedback ({feedback?.length ?? "…"})
+        </h2>
+        {stats && stats.totalFeedback > 0 && (
+          <div className="flex items-center gap-1.5 bg-amber-50 border border-amber-200 rounded-full px-3 py-1">
+            <Star className="w-4 h-4 fill-amber-400 text-amber-400" />
+            <span className="text-sm font-semibold text-amber-700">{stats.avgRating.toFixed(1)}</span>
+            <span className="text-xs text-amber-600">avg rating</span>
+          </div>
+        )}
+      </div>
+
+      <Card>
+        <CardContent className="p-0">
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>User</TableHead>
+                  <TableHead>Rating</TableHead>
+                  <TableHead>Category</TableHead>
+                  <TableHead>Feedback</TableHead>
+                  <TableHead>Date</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {isLoading
+                  ? Array.from({ length: 8 }).map((_, i) => (
+                      <TableRow key={i}>
+                        {Array.from({ length: 5 }).map((__, j) => (
+                          <TableCell key={j}>
+                            <div className="h-4 bg-gray-100 rounded animate-pulse w-24" />
+                          </TableCell>
+                        ))}
+                      </TableRow>
+                    ))
+                  : feedback?.length === 0
+                  ? (
+                      <TableRow>
+                        <TableCell colSpan={5} className="text-center py-12 text-gray-400">
+                          <MessageSquarePlus className="w-8 h-8 mx-auto mb-2 opacity-30" />
+                          <p>No feedback yet. Beta testers will see a feedback button in the app.</p>
+                        </TableCell>
+                      </TableRow>
+                    )
+                  : feedback?.map((fb) => (
+                      <TableRow key={fb.id}>
+                        <TableCell>
+                          <div>
+                            <p className="text-sm font-medium">{fb.userName ?? "—"}</p>
+                            <p className="text-xs text-gray-400">{fb.userEmail ?? "—"}</p>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-0.5">
+                            {Array.from({ length: 5 }).map((_, i) => (
+                              <Star
+                                key={i}
+                                className={`w-3.5 h-3.5 ${
+                                  i < fb.rating ? "fill-amber-400 text-amber-400" : "text-gray-200"
+                                }`}
+                              />
+                            ))}
+                            <span className="text-xs text-gray-500 ml-1">{fb.rating}/5</span>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <span
+                            className={`text-xs font-medium px-2 py-0.5 rounded-full ${
+                              CATEGORY_COLORS[fb.category] ?? "bg-gray-100 text-gray-700"
+                            }`}
+                          >
+                            {CATEGORY_LABELS[fb.category] ?? fb.category}
+                          </span>
+                        </TableCell>
+                        <TableCell className="max-w-xs">
+                          <p className="text-sm text-gray-700 line-clamp-2">{fb.message}</p>
+                        </TableCell>
+                        <TableCell className="text-sm text-gray-500 whitespace-nowrap">
+                          {new Date(fb.createdAt).toLocaleDateString()}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+              </TableBody>
+            </Table>
+          </div>
         </CardContent>
       </Card>
     </div>

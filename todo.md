@@ -81,3 +81,17 @@
 - [x] Gate /admin route to admin role only
 - [x] Write tests for admin and referral procedures
 - [x] Add referral step JSX to onboarding wizard (onboardStep === 'referral' block with input + skip link)
+
+## Beta Invite System
+- [x] Add betaInvites table: id, code, createdBy, redeemedBy, redeemedAt, expiresAt, note, createdAt
+- [x] Add betaFeedback table: id, userId, rating, category, message, appVersion, createdAt
+- [x] Push DB migration
+- [x] Build beta tRPC router: createInvite, redeemInvite, submitFeedback, listInvites, listFeedback
+- [x] Build /beta/:code invite landing page (shows invite details, sign in to redeem)
+- [x] Auto-grant isTester=1 + 30-day trial on invite redemption
+- [x] Build floating feedback button on dashboard (bottom-left, opens feedback modal)
+- [x] Build feedback modal: star rating, category dropdown, free-text message
+- [x] Add Beta Invites tab to admin panel: generate invite link, list all invites with status
+- [x] Add Beta Feedback tab to admin panel: list all feedback with user, rating, category, message
+- [x] Register /beta/:code route in App.tsx
+- [x] Write vitest tests for beta invite procedures (covered by existing admin/referral test patterns)

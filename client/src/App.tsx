@@ -7,6 +7,8 @@ import { ThemeProvider } from "./contexts/ThemeContext";
 import Home from "./pages/Home";
 import LandingPage from "./pages/LandingPage";
 import AdminDashboard from "./pages/AdminDashboard";
+import BetaInvitePage from "./pages/BetaInvitePage";
+import FeedbackButton from "./components/FeedbackButton";
 import { useAuth } from "./_core/hooks/useAuth";
 
 /**
@@ -28,11 +30,19 @@ function RootRoute() {
   return isAuthenticated ? <Home /> : <LandingPage />;
 }
 
+/** Floating feedback button — only shown to authenticated users */
+function GlobalFeedbackButton() {
+  const { isAuthenticated } = useAuth();
+  if (!isAuthenticated) return null;
+  return <FeedbackButton />;
+}
+
 function Router() {
   return (
     <Switch>
       <Route path="/" component={RootRoute} />
       <Route path="/admin" component={AdminDashboard} />
+      <Route path="/beta/:code" component={BetaInvitePage} />
       <Route path="/404" component={NotFound} />
       {/* Final fallback route */}
       <Route component={NotFound} />
@@ -47,6 +57,7 @@ function App() {
         <TooltipProvider>
           <Toaster />
           <Router />
+          <GlobalFeedbackButton />
         </TooltipProvider>
       </ThemeProvider>
     </ErrorBoundary>
