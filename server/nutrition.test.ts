@@ -8,11 +8,30 @@ vi.mock("./_core/llm", () => ({
   invokeLLM: vi.fn(),
 }));
 
+// ---------------------------------------------------------------------------
+// Mock the subscription DB helpers so tests bypass the AI call limit check
+// and never touch the real database.
+// ---------------------------------------------------------------------------
+vi.mock("./db-subscriptions", () => ({
+  getOrCreateSubscription: vi.fn().mockResolvedValue({
+    id: 1,
+    userId: 1,
+    tier: "plus",           // paid tier → unlimited calls
+    aiCallsUsedThisMonth: 0,
+    periodStart: new Date(),
+    stripeCustomerId: null,
+    stripeSubscriptionId: null,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  }),
+  incrementAICallsUsed: vi.fn().mockResolvedValue(undefined),
+}));
+
 import { invokeLLM } from "./_core/llm";
+import { getOrCreateSubscription, incrementAICallsUsed } from "./db-subscriptions";
 import { nutritionRouter } from "./routers/nutrition";
 
 // Helper: create a caller with a mock authenticated user context
-// (analyzeTranscript is now a protectedProcedure that enforces AI call limits)
 function createCaller() {
   const mockCtx = {
     user: { id: 1, name: "Test User", email: "test@example.com", role: "user" as const },
@@ -42,6 +61,19 @@ function mockLLMResponse(payload: object) {
 describe("nutrition.analyzeTranscript", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // Re-apply the subscription mock after clearAllMocks resets it
+    vi.mocked(getOrCreateSubscription).mockResolvedValue({
+      id: 1,
+      userId: 1,
+      tier: "plus",
+      aiCallsUsedThisMonth: 0,
+      periodStart: new Date(),
+      stripeCustomerId: null,
+      stripeSubscriptionId: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+    vi.mocked(incrementAICallsUsed).mockResolvedValue(undefined);
   });
 
   it("returns structured nutritional data for a clear food description", async () => {

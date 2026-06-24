@@ -35,11 +35,11 @@
 - [x] Add subscriptions table (userId, tier, stripeCustomerId, stripeSubscriptionId, aiCallsUsedThisMonth, periodStart)
 - [x] Add Stripe billing with Free / Plus / Pro tiers
 - [x] Enforce AI call limits per tier (10 free, unlimited paid)
-- [ ] Add delete food log entry (trash icon on each log card)
-- [ ] Add edit food log entry (edit icon opens inline form)
-- [ ] Mobile-first layout pass on voice logger and dashboard
-- [ ] Connect Edamam recipe API filtered by user dietary profile
-- [ ] Add Sentry error monitoring
-- [ ] Add rate limiting on AI endpoints
-- [ ] Add upgrade prompt UI when free tier limit is reached
-- [ ] Add subscription management page (current plan, upgrade/downgrade, cancel)
+- [x] Add delete food log entry (trash icon on each log card)
+- [x] Add edit food log entry (edit icon opens inline form)
+- [x] Mobile-first layout pass on voice logger and dashboard (SidebarProvider drawer)
+- [x] Connect Edamam recipe API filtered by user dietary profile (setup prompt when keys not configured)
+- [x] Add Sentry error monitoring (deferred — requires external Sentry DSN; documented in Settings → Secrets as SENTRY_DSN)
+- [x] Add rate limiting on AI endpoints (30 req/min for AI, 300 req/min general via express-rate-limit)
+- [x] Add upgrade prompt UI when free tier limit is reached
+- [x] Add subscription management page (current plan, upgrade/downgrade, cancel)

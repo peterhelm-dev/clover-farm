@@ -1,14 +1,39 @@
 import "dotenv/config";
 import express from "express";
+import { initSentry, sentryErrorHandler } from "./sentry";
 import { createServer } from "http";
 import net from "net";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
+import { rateLimit } from "express-rate-limit";
 import { registerOAuthRoutes } from "./oauth";
 import { registerStorageProxy } from "./storageProxy";
 import { registerStripeWebhook } from "./stripeWebhook";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
+
+// ---------------------------------------------------------------------------
+// Rate limiters
+// ---------------------------------------------------------------------------
+/** General API: 300 requests per minute per IP */
+const generalApiLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 300,
+  standardHeaders: "draft-7",
+  legacyHeaders: false,
+  message: { error: "Too many requests, please slow down." },
+  skip: () => process.env.NODE_ENV === "test",
+});
+
+/** AI endpoints (nutrition, healthInsights): 30 requests per minute per IP */
+const aiLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 30,
+  standardHeaders: "draft-7",
+  legacyHeaders: false,
+  message: { error: "AI rate limit reached. Please wait a moment before trying again." },
+  skip: () => process.env.NODE_ENV === "test",
+});
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -30,15 +55,27 @@ async function findAvailablePort(startPort: number = 3000): Promise<number> {
 }
 
 async function startServer() {
+  // Initialize Sentry before anything else so all errors are captured
+  initSentry();
+
   const app = express();
   const server = createServer(app);
+
   // Register Stripe webhook BEFORE express.json() middleware
   registerStripeWebhook(app);
+
   // Configure body parser with larger size limit for file uploads
   app.use(express.json({ limit: "50mb" }));
   app.use(express.urlencoded({ limit: "50mb", extended: true }));
+
   registerStorageProxy(app);
   registerOAuthRoutes(app);
+
+  // Rate limiting — AI routes first (more restrictive), then general
+  app.use("/api/trpc/nutrition", aiLimiter);
+  app.use("/api/trpc/healthInsights", aiLimiter);
+  app.use("/api/trpc", generalApiLimiter);
+
   // tRPC API
   app.use(
     "/api/trpc",
@@ -47,6 +84,7 @@ async function startServer() {
       createContext,
     })
   );
+
   // development mode uses Vite, production mode uses static files
   if (process.env.NODE_ENV === "development") {
     await setupVite(app, server);
@@ -66,4 +104,7 @@ async function startServer() {
   });
 }
 
-startServer().catch(console.error);
+startServer().catch(err => {
+  console.error(err);
+  process.exit(1);
+});
