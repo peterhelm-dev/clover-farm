@@ -124,8 +124,11 @@ export const nutritionRouter = router({
       // Auto-create free subscription if it doesn't exist
       const sub = await getOrCreateSubscription(ctx.user.id);
 
+      // Testers get unlimited AI calls regardless of tier
+      // isTester is stored as 0/1 in MySQL (tinyint), so coerce to boolean
+      const isTester = !!(ctx.user.isTester);
       const limit = getAICallLimit(sub.tier);
-      if (sub.aiCallsUsedThisMonth >= limit) {
+      if (!isTester && sub.aiCallsUsedThisMonth >= limit) {
         throw new TRPCError({
           code: "FORBIDDEN",
           message: `You have reached your AI call limit for this month (${limit} calls). Upgrade to Clover Plus for unlimited logs.`,

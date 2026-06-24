@@ -17,6 +17,10 @@ export const users = mysqlTable("users", {
   email: varchar("email", { length: 320 }),
   loginMethod: varchar("loginMethod", { length: 64 }),
   role: mysqlEnum("role", ["user", "admin"]).default("user").notNull(),
+  /** Testers get unlimited AI calls and Pro features regardless of subscription tier */
+  isTester: int("isTester").default(0).notNull(), // 0=false, 1=true
+  /** Unique referral code for this user (generated on first login) */
+  referralCode: varchar("referralCode", { length: 16 }).unique(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
   lastSignedIn: timestamp("lastSignedIn").defaultNow().notNull(),
@@ -83,6 +87,11 @@ export const subscriptions = mysqlTable("subscriptions", {
   stripeSubscriptionId: varchar("stripeSubscriptionId", { length: 128 }),
   aiCallsUsedThisMonth: int("aiCallsUsedThisMonth").default(0).notNull(),
   periodStart: timestamp("periodStart").defaultNow().notNull(),
+  /** Trial support: Plus trial auto-started on first login */
+  trialEndsAt: timestamp("trialEndsAt"),
+  trialUsed: int("trialUsed").default(0).notNull(), // 0=never used, 1=used
+  /** Free months credited from referrals (each = 1 month of Pro) */
+  freeMonthsRemaining: int("freeMonthsRemaining").default(0).notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
@@ -102,3 +111,22 @@ export const waitlist = mysqlTable("waitlist", {
 
 export type Waitlist = typeof waitlist.$inferSelect;
 export type InsertWaitlist = typeof waitlist.$inferInsert;
+
+// ---------------------------------------------------------------------------
+// Referrals (one row per successful referred signup)
+// ---------------------------------------------------------------------------
+export const referrals = mysqlTable("referrals", {
+  id: int("id").autoincrement().primaryKey(),
+  /** The user who shared their referral code */
+  referrerId: int("referrerId").notNull(),
+  /** The new user who signed up using the code */
+  referredUserId: int("referredUserId").notNull().unique(),
+  /** The referral code that was used */
+  code: varchar("code", { length: 16 }).notNull(),
+  /** Whether the free month has been credited to the referrer */
+  status: mysqlEnum("status", ["pending", "credited"]).default("pending").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type Referral = typeof referrals.$inferSelect;
+export type InsertReferral = typeof referrals.$inferInsert;

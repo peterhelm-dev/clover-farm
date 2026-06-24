@@ -12,7 +12,8 @@ import {
   Sparkles, Calendar, Check, Leaf, Clock,
   Mic, MicOff, BrainCircuit, Heart, AlertTriangle, Apple, Compass,
   LogOut, Activity, BarChart3, Bell, RefreshCw, Smartphone, ChevronRight,
-  ChevronLeft, Send, SkipForward, Loader2, Wheat, Trash2, Pencil, Crown, X, CreditCard
+  ChevronLeft, Send, SkipForward, Loader2, Wheat, Trash2, Pencil, Crown, X, CreditCard,
+  Share2, Copy, Gift
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -37,9 +38,9 @@ type ChatMessage = {
   logSaved?: boolean;
 };
 
-type OnboardStep = "age" | "weight" | "diet" | "allergies" | "conditions" | "done";
+type OnboardStep = "age" | "weight" | "diet" | "allergies" | "conditions" | "referral" | "done";
 
-const ONBOARD_STEPS: OnboardStep[] = ["age", "weight", "diet", "allergies", "conditions", "done"];
+const ONBOARD_STEPS: OnboardStep[] = ["age", "weight", "diet", "allergies", "conditions", "referral", "done"];
 
 const DIET_OPTIONS = ["Balanced", "Vegetarian", "Vegan", "Keto", "Paleo", "High Protein", "Low Carb"];
 const ALLERGEN_OPTIONS = ["Peanuts", "Tree Nuts", "Gluten", "Dairy", "Soy", "Shellfish", "Eggs"];
@@ -59,6 +60,98 @@ function confidenceColor(c: "high" | "medium" | "low") {
   if (c === "high") return "border-emerald-300 text-emerald-700 bg-emerald-50";
   if (c === "medium") return "border-amber-300 text-amber-700 bg-amber-50";
   return "border-red-300 text-red-700 bg-red-50";
+}
+
+// ---------------------------------------------------------------------------
+// ReferralCard sub-component
+// ---------------------------------------------------------------------------
+function ReferralCard() {
+  const { data, isLoading } = trpc.referral.getMyReferrals.useQuery();
+  const applyCode = trpc.referral.applyCode.useMutation({
+    onSuccess: (res) => {
+      if (res.success) toast.success(res.message);
+      else toast.error(res.message);
+    },
+  });
+  const [codeInput, setCodeInput] = useState("");
+  const [copied, setCopied] = useState(false);
+
+  const copyCode = () => {
+    if (!data?.code) return;
+    navigator.clipboard.writeText(data.code);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  const shareLink = () => {
+    if (!data?.code) return;
+    const url = `${window.location.origin}?ref=${data.code}`;
+    navigator.clipboard.writeText(url);
+    toast.success("Referral link copied!");
+  };
+
+  return (
+    <Card className="border-border/60">
+      <CardHeader className="p-5 border-b border-border/40">
+        <div className="flex items-center gap-2">
+          <Gift className="h-5 w-5 text-primary" />
+          <CardTitle className="font-serif text-base">Refer Friends, Earn Free Months</CardTitle>
+        </div>
+        <CardDescription className="text-xs mt-1">
+          Share your code and earn 1 free Pro month for every friend who signs up.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="p-5">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+          {/* My referral code */}
+          <div className="space-y-3">
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Your Referral Code</p>
+            {isLoading ? (
+              <div className="h-10 bg-muted animate-pulse rounded-lg" />
+            ) : (
+              <div className="flex items-center gap-2">
+                <code className="flex-1 bg-muted rounded-lg px-4 py-2 font-mono text-lg font-bold tracking-widest text-center">
+                  {data?.code ?? "—"}
+                </code>
+                <Button variant="outline" size="icon" onClick={copyCode} title="Copy code">
+                  {copied ? <Check className="h-4 w-4 text-green-600" /> : <Copy className="h-4 w-4" />}
+                </Button>
+                <Button variant="outline" size="icon" onClick={shareLink} title="Copy share link">
+                  <Share2 className="h-4 w-4" />
+                </Button>
+              </div>
+            )}
+            <div className="flex gap-4 text-xs text-muted-foreground">
+              <span><strong className="text-foreground">{data?.totalReferrals ?? 0}</strong> friends referred</span>
+              <span><strong className="text-foreground">{data?.freeMonthsRemaining ?? 0}</strong> free months earned</span>
+            </div>
+          </div>
+
+          {/* Apply a referral code */}
+          <div className="space-y-3">
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Have a Friend's Code?</p>
+            <div className="flex gap-2">
+              <Input
+                placeholder="Enter referral code"
+                value={codeInput}
+                onChange={(e) => setCodeInput(e.target.value.toUpperCase())}
+                className="font-mono uppercase text-sm"
+                maxLength={16}
+              />
+              <Button
+                size="sm"
+                disabled={applyCode.isPending || codeInput.length < 4}
+                onClick={() => applyCode.mutate({ code: codeInput })}
+              >
+                {applyCode.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Apply"}
+              </Button>
+            </div>
+            <p className="text-xs text-muted-foreground">You can only apply one referral code. Your friend earns a free month too.</p>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -313,6 +406,7 @@ export default function Home() {
     },
     onError: () => toast.error("Could not start checkout. Please try again."),
   });
+  const applyReferralCodeMutation = trpc.referral.applyCode.useMutation();
   const subscriptionQuery = trpc.billing.getSubscription.useQuery(undefined, {
     enabled: isAuthenticated,
   });
@@ -330,6 +424,7 @@ export default function Home() {
   const [onboardDiet, setOnboardDiet] = useState<string[]>([]);
   const [onboardAllergies, setOnboardAllergies] = useState<string[]>([]);
   const [onboardConditions, setOnboardConditions] = useState<string[]>([]);
+  const [onboardReferralCode, setOnboardReferralCode] = useState("");
 
   // ---- voice logger chat ----
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
@@ -457,7 +552,7 @@ export default function Home() {
   const advanceOnboard = async () => {
     const next = ONBOARD_STEPS[onboardStepIndex + 1];
     if (onboardStep === "conditions") {
-      // Final step — save to DB
+      // Save profile, then advance to referral step
       try {
         await saveProfileMutation.mutateAsync({
           age: onboardAge ? parseInt(onboardAge) : undefined,
@@ -467,11 +562,23 @@ export default function Home() {
           healthConditions: onboardConditions,
           onboardingComplete: 1,
         });
-        toast.success("Welcome to Clover! Your profile is ready.");
-        setOnboardStep("done");
+        setOnboardStep("referral");
       } catch {
         toast.error("Failed to save profile. Please try again.");
       }
+    } else if (onboardStep === "referral") {
+      // Apply referral code if provided, then finish
+      if (onboardReferralCode.trim().length >= 4) {
+        try {
+          const res = await applyReferralCodeMutation.mutateAsync({ code: onboardReferralCode.trim() });
+          if (res.success) toast.success(res.message);
+          else toast.error(res.message);
+        } catch {
+          // Non-blocking — continue to dashboard even if code fails
+        }
+      }
+      toast.success("Welcome to Clover! Your profile is ready.");
+      setOnboardStep("done");
     } else {
       setOnboardStep(next);
     }
@@ -800,6 +907,31 @@ export default function Home() {
                   </div>
                 </div>
               )}
+              {onboardStep === "referral" && (
+                <div className="space-y-4">
+                  <h3 className="font-serif text-xl font-bold">Got a referral code?</h3>
+                  <p className="text-sm text-muted-foreground">
+                    Enter a friend's referral code to earn a free month of Clover Plus.
+                  </p>
+                  <div className="space-y-3">
+                    <input
+                      type="text"
+                      placeholder="e.g. CLOVER-ABC123"
+                      value={onboardReferralCode}
+                      onChange={e => setOnboardReferralCode(e.target.value.toUpperCase())}
+                      onKeyDown={e => { if (e.key === "Enter") advanceOnboard(); }}
+                      className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 tracking-widest font-mono"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => advanceOnboard()}
+                      className="text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground transition-colors"
+                    >
+                      Skip — I don't have a code
+                    </button>
+                  </div>
+                </div>
+              )}
             </CardContent>
 
             <div className="px-6 pb-6 flex justify-between items-center">
@@ -816,12 +948,14 @@ export default function Home() {
               </Button>
               <Button
                 onClick={advanceOnboard}
-                disabled={saveProfileMutation.isPending}
+                disabled={saveProfileMutation.isPending || applyReferralCodeMutation.isPending}
                 className="gap-2"
               >
-                {saveProfileMutation.isPending ? (
+                {(saveProfileMutation.isPending || applyReferralCodeMutation.isPending) ? (
                   <Loader2 className="h-4 w-4 animate-spin" />
                 ) : onboardStep === "conditions" ? (
+                  <>Next <ChevronRight className="h-4 w-4" /></>
+                ) : onboardStep === "referral" ? (
                   <>Finish Setup <Check className="h-4 w-4" /></>
                 ) : (
                   <>Next <ChevronRight className="h-4 w-4" /></>
@@ -930,6 +1064,32 @@ export default function Home() {
         {/* ===== A. DASHBOARD ===== */}
         {activeTab === "dashboard" && (
           <div className="space-y-8 max-w-5xl">
+
+            {/* ---- Trial countdown banner ---- */}
+            {(() => {
+              const sub = subscriptionQuery.data;
+              if (!sub?.trialEndsAt) return null;
+              const trialEnd = new Date(sub.trialEndsAt);
+              const daysLeft = Math.max(0, Math.ceil((trialEnd.getTime() - Date.now()) / 86400000));
+              if (daysLeft <= 0) return null;
+              return (
+                <div className="flex items-center justify-between gap-4 rounded-xl border border-amber-200 bg-amber-50 px-5 py-3">
+                  <div className="flex items-center gap-3">
+                    <span className="text-2xl">⏳</span>
+                    <div>
+                      <p className="text-sm font-semibold text-amber-800">
+                        {daysLeft} day{daysLeft !== 1 ? "s" : ""} left on your free Plus trial
+                      </p>
+                      <p className="text-xs text-amber-600">Upgrade before {trialEnd.toLocaleDateString()} to keep unlimited AI logging.</p>
+                    </div>
+                  </div>
+                  <Button size="sm" className="bg-amber-500 hover:bg-amber-600 text-white shrink-0" onClick={() => setActiveTab("billing")}>
+                    Upgrade Now
+                  </Button>
+                </div>
+              );
+            })()}
+
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
               <div>
                 <h2 className="text-2xl sm:text-3xl font-serif font-bold tracking-tight">Your Health Habits</h2>
@@ -1216,6 +1376,10 @@ export default function Home() {
                 )}
               </Card>
             </div>
+
+            {/* ===== Referral Card ===== */}
+            <ReferralCard />
+
           </div>
         )}
 

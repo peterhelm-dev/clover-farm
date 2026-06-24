@@ -16,19 +16,32 @@ export async function getOrCreateSubscription(userId: number) {
     .limit(1);
 
   if (sub.length > 0) {
-    return sub[0];
+    const existing = sub[0];
+    // Auto-downgrade expired trials to free tier
+    if (existing.trialEndsAt && new Date(existing.trialEndsAt) < new Date() && existing.tier === "plus" && existing.trialUsed === 1 && !existing.stripeSubscriptionId) {
+      await db.update(subscriptions).set({ tier: "free" }).where(eq(subscriptions.userId, userId));
+      return { ...existing, tier: "free" as const };
+    }
+    return existing;
   }
 
-  // Create a new free subscription for the user
+  // Create a new subscription with a 14-day Plus trial for new users
   const db2 = await getDb();
   if (!db2) throw new Error("Database not available");
-  
+
+  const trialEndsAt = new Date();
+  trialEndsAt.setDate(trialEndsAt.getDate() + 14);
+
   await db2
     .insert(subscriptions)
     .values({
       userId,
-      tier: "free",
+      tier: "plus",          // trial starts on Plus
       aiCallsUsedThisMonth: 0,
+      periodStart: new Date(),
+      trialEndsAt,
+      trialUsed: 1,           // mark trial as used so it can't be restarted
+      freeMonthsRemaining: 0,
     });
 
   // Fetch and return the created subscription
@@ -116,16 +129,18 @@ export async function resetAICallsForNewPeriod(userId: number) {
 }
 
 /**
- * Check if user has exceeded their AI call limit
+ * Check if user has exceeded their AI call limit.
+ * Testers always return false (unlimited).
  */
 export async function hasExceededAILimit(
   userId: number,
-  limit: number
+  limit: number,
+  isTester?: boolean
 ): Promise<boolean> {
+  if (isTester) return false; // testers have unlimited AI calls
   const sub = await getSubscriptionByUserId(userId);
   if (!sub) {
     return false;
   }
-
   return sub.aiCallsUsedThisMonth >= limit;
 }

@@ -22,6 +22,8 @@ export const billingRouter = router({
       aiCallsLimit: getAICallLimit(sub.tier),
       stripeCustomerId: sub.stripeCustomerId,
       stripeSubscriptionId: sub.stripeSubscriptionId,
+      trialEndsAt: sub.trialEndsAt ?? null,
+      freeMonthsRemaining: sub.freeMonthsRemaining ?? 0,
     };
   }),
 

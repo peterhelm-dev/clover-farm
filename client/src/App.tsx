@@ -6,6 +6,7 @@ import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import Home from "./pages/Home";
 import LandingPage from "./pages/LandingPage";
+import AdminDashboard from "./pages/AdminDashboard";
 import { useAuth } from "./_core/hooks/useAuth";
 
 /**
@@ -31,6 +32,7 @@ function Router() {
   return (
     <Switch>
       <Route path="/" component={RootRoute} />
+      <Route path="/admin" component={AdminDashboard} />
       <Route path="/404" component={NotFound} />
       {/* Final fallback route */}
       <Route component={NotFound} />

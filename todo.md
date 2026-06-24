@@ -62,3 +62,22 @@
 - [x] Add email capture form to hero section in LandingPage.tsx
 - [x] Show success confirmation state after signup
 - [x] Prevent duplicate email signups (unique constraint + friendly error)
+
+## Admin Dashboard, Tester Privileges, Free Trial & Referral System
+- [x] Add `isTester` boolean to users table (testers get unlimited AI calls + pro features)
+- [x] Add trial columns to subscriptions: trialEndsAt, trialUsed
+- [x] Add referrals table: id, referrerId, referredUserId, code, status, freeMonthsGranted, createdAt
+- [x] Add referralCode to users table
+- [x] Create SQL for new columns/tables in DB
+- [x] Build adminProcedure router: listUsers, setRole, setTester, overrideSubscription, getStats, listWaitlist
+- [x] Build referral router: generateCode, applyCode, getMyReferrals
+- [x] Auto-start 14-day Plus trial on first login (if no subscription exists)
+- [x] Show trial countdown banner on dashboard
+- [x] Enforce trial expiry: revert to free tier when trialEndsAt passes
+- [x] Build /admin route with user management table, tester toggle, subscription override
+- [x] Build admin stats panel: total users, active trials, paid subscribers, waitlist count, referrals
+- [x] Build referral UI on dashboard: show referral link, copy button, referral count, months earned
+- [x] Add referral code input on onboarding step wizard
+- [x] Gate /admin route to admin role only
+- [x] Write tests for admin and referral procedures
+- [x] Add referral step JSX to onboarding wizard (onboardStep === 'referral' block with input + skip link)
