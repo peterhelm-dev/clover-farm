@@ -43,3 +43,13 @@
 - [x] Add rate limiting on AI endpoints (30 req/min for AI, 300 req/min general via express-rate-limit)
 - [x] Add upgrade prompt UI when free tier limit is reached
 - [x] Add subscription management page (current plan, upgrade/downgrade, cancel)
+
+## Public Marketing Landing Page
+- [x] Create client/src/pages/LandingPage.tsx with hero, features, pricing, and footer
+- [x] Wire App.tsx: / shows LandingPage for guests, Home (dashboard) for authenticated users
+- [x] Add sticky nav with logo, pricing anchor, and Sign In button
+- [x] Hero section: headline, subheadline, animated CTA, app screenshot mockup
+- [x] Features section: 6 feature cards (voice logging, AI nutrition, calendar, recipes, AI chat, multi-device)
+- [x] Pricing section: Free / Plus / Pro cards with feature lists and CTA buttons
+- [x] Social proof / testimonial placeholder section
+- [x] Footer with links and copyright

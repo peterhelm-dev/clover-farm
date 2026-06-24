@@ -5,12 +5,32 @@ import { Route, Switch } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import Home from "./pages/Home";
+import LandingPage from "./pages/LandingPage";
+import { useAuth } from "./_core/hooks/useAuth";
+
+/**
+ * Root route: show the marketing landing page to guests,
+ * and the full dashboard to authenticated users.
+ */
+function RootRoute() {
+  const { isAuthenticated, loading } = useAuth();
+
+  // While the auth check is in flight show nothing (avoids flash of landing page for returning users)
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <div className="w-6 h-6 rounded-full border-2 border-blue-600 border-t-transparent animate-spin" />
+      </div>
+    );
+  }
+
+  return isAuthenticated ? <Home /> : <LandingPage />;
+}
 
 function Router() {
-  // make sure to consider if you need authentication for certain routes
   return (
     <Switch>
-      <Route path="/" component={Home} />
+      <Route path="/" component={RootRoute} />
       <Route path="/404" component={NotFound} />
       {/* Final fallback route */}
       <Route component={NotFound} />
