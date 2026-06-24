@@ -53,3 +53,12 @@
 - [x] Pricing section: Free / Plus / Pro cards with feature lists and CTA buttons
 - [x] Social proof / testimonial placeholder section
 - [x] Footer with links and copyright
+
+## Waitlist Email Capture
+- [x] Add `waitlist` table to drizzle/schema.ts (id, email, createdAt, source)
+- [x] Create SQL for waitlist table in DB
+- [x] Add `waitlist.join` publicProcedure in server/routers/waitlist.ts
+- [x] Register waitlistRouter in server/routers.ts
+- [x] Add email capture form to hero section in LandingPage.tsx
+- [x] Show success confirmation state after signup
+- [x] Prevent duplicate email signups (unique constraint + friendly error)

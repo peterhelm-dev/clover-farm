@@ -1,7 +1,10 @@
 import { Button } from "@/components/ui/button";
+import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import { getLoginUrl } from "@/const";
+import { trpc } from "@/lib/trpc";
 import {
   Mic,
   BarChart3,
@@ -196,6 +199,38 @@ function NavBar() {
 }
 
 function HeroSection() {
+  const [email, setEmail] = useState("");
+  const [submitted, setSubmitted] = useState(false);
+  const [alreadyRegistered, setAlreadyRegistered] = useState(false);
+  const [emailError, setEmailError] = useState("");
+
+  const joinWaitlist = trpc.waitlist.join.useMutation({
+    onSuccess: (data) => {
+      setSubmitted(true);
+      setAlreadyRegistered(data.alreadyRegistered);
+      setEmail("");
+    },
+    onError: (err) => {
+      setEmailError(err.message || "Something went wrong. Please try again.");
+    },
+  });
+
+  function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setEmailError("");
+    const trimmed = email.trim();
+    if (!trimmed) {
+      setEmailError("Please enter your email address.");
+      return;
+    }
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(trimmed)) {
+      setEmailError("Please enter a valid email address.");
+      return;
+    }
+    joinWaitlist.mutate({ email: trimmed, source: "landing_hero" });
+  }
+
   return (
     <section className="relative overflow-hidden bg-gradient-to-b from-blue-50/60 via-white to-white pt-20 pb-24 sm:pt-28 sm:pb-32">
       {/* Background decoration */}
@@ -221,23 +256,53 @@ function HeroSection() {
           without the friction of traditional food trackers.
         </p>
 
-        <div className="mt-10 flex flex-col sm:flex-row items-center justify-center gap-4">
-          <Button size="lg" className="w-full sm:w-auto gap-2 text-base px-8 h-12 relative overflow-hidden group" asChild>
-            <a href={getLoginUrl()}>
-              {/* Subtle shimmer sweep on the primary CTA */}
-              <span className="absolute inset-0 -translate-x-full group-hover:translate-x-full transition-transform duration-700 ease-in-out bg-gradient-to-r from-transparent via-white/20 to-transparent pointer-events-none" />
-              Start for free
-              <ArrowRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform duration-150" />
+        {/* Email capture form */}
+        {submitted ? (
+          <div className="mt-10 flex flex-col items-center gap-3">
+            <div className="inline-flex items-center gap-2 px-5 py-3 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-700 text-sm font-medium">
+              <Check className="w-4 h-4" />
+              {alreadyRegistered
+                ? "You're already on the list — we'll be in touch!"
+                : "You're on the list! We'll notify you when we launch."}
+            </div>
+            <a href={getLoginUrl()} className="text-sm text-blue-600 hover:underline">
+              Try the app now →
             </a>
-          </Button>
-          <Button size="lg" variant="outline" className="w-full sm:w-auto text-base px-8 h-12 bg-white" asChild>
-            <a href="#pricing">See pricing</a>
-          </Button>
-        </div>
-
-        <p className="mt-4 text-xs text-muted-foreground">
-          No credit card required &nbsp;·&nbsp; 10 free AI logs per month &nbsp;·&nbsp; Cancel anytime
-        </p>
+          </div>
+        ) : (
+          <form onSubmit={handleSubmit} className="mt-10 flex flex-col items-center gap-3">
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full max-w-md">
+              <Input
+                type="email"
+                placeholder="Enter your email address"
+                value={email}
+                onChange={(e) => { setEmail(e.target.value); setEmailError(""); }}
+                className="h-12 text-base flex-1 bg-white border-border/60"
+                disabled={joinWaitlist.isPending}
+                aria-label="Email address"
+              />
+              <Button
+                type="submit"
+                size="lg"
+                className="h-12 px-6 gap-2 relative overflow-hidden group whitespace-nowrap"
+                disabled={joinWaitlist.isPending}
+              >
+                <span className="absolute inset-0 -translate-x-full group-hover:translate-x-full transition-transform duration-700 ease-in-out bg-gradient-to-r from-transparent via-white/20 to-transparent pointer-events-none" />
+                {joinWaitlist.isPending ? "Joining..." : "Get early access"}
+                {!joinWaitlist.isPending && <ArrowRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform duration-150" />}
+              </Button>
+            </div>
+            {emailError && (
+              <p className="text-xs text-red-500">{emailError}</p>
+            )}
+            <p className="text-xs text-muted-foreground">
+              No credit card required &nbsp;·&nbsp; 10 free AI logs per month &nbsp;·&nbsp; Cancel anytime
+            </p>
+            <a href={getLoginUrl()} className="text-xs text-blue-600 hover:underline">
+              Already have an account? Sign in →
+            </a>
+          </form>
+        )}
 
         {/* App preview mockup */}
         <div className="mt-16 relative max-w-3xl mx-auto">
