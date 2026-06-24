@@ -3,6 +3,8 @@ import { z } from "zod";
 import { protectedProcedure, router } from "../_core/trpc";
 import {
   createFoodLog,
+  deleteFoodLog,
+  updateFoodLog,
   getAllFoodLogs,
   getFoodLogsByDateRange,
   getUserProfile,
@@ -80,6 +82,64 @@ export const foodLogsRouter = router({
     const rows = await getAllFoodLogs(ctx.user.id);
     return rows.map(normalizeLog);
   }),
+
+  // -------------------------------------------------------------------------
+  // Delete a food log entry (owner-only)
+  // -------------------------------------------------------------------------
+  delete: protectedProcedure
+    .input(z.object({ id: z.number().int().positive() }))
+    .mutation(async ({ ctx, input }) => {
+      try {
+        await deleteFoodLog(input.id, ctx.user.id);
+        return { success: true };
+      } catch (err) {
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: "Failed to delete food log",
+          cause: err,
+        });
+      }
+    }),
+
+  // -------------------------------------------------------------------------
+  // Update a food log entry (owner-only, inline edit)
+  // -------------------------------------------------------------------------
+  update: protectedProcedure
+    .input(
+      z.object({
+        id: z.number().int().positive(),
+        foodName: z.string().min(1).optional(),
+        quantity: z.string().optional(),
+        calories: z.number().min(0).optional(),
+        protein: z.number().min(0).optional(),
+        carbs: z.number().min(0).optional(),
+        fat: z.number().min(0).optional(),
+        fiber: z.number().min(0).optional(),
+        notes: z.string().optional(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const { id, ...fields } = input;
+      const data: Record<string, string> = {};
+      if (fields.foodName !== undefined) data.foodName = fields.foodName;
+      if (fields.quantity !== undefined) data.quantity = fields.quantity;
+      if (fields.calories !== undefined) data.calories = String(fields.calories);
+      if (fields.protein !== undefined) data.protein = String(fields.protein);
+      if (fields.carbs !== undefined) data.carbs = String(fields.carbs);
+      if (fields.fat !== undefined) data.fat = String(fields.fat);
+      if (fields.fiber !== undefined) data.fiber = String(fields.fiber);
+      if (fields.notes !== undefined) data.notes = fields.notes;
+      try {
+        await updateFoodLog(id, ctx.user.id, data);
+        return { success: true };
+      } catch (err) {
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: "Failed to update food log",
+          cause: err,
+        });
+      }
+    }),
 
   // -------------------------------------------------------------------------
   // User profile: get

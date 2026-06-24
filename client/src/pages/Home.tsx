@@ -12,9 +12,15 @@ import {
   Sparkles, Calendar, Check, Leaf, Clock,
   Mic, MicOff, BrainCircuit, Heart, AlertTriangle, Apple, Compass,
   LogOut, Activity, BarChart3, Bell, RefreshCw, Smartphone, ChevronRight,
-  ChevronLeft, Send, SkipForward, Loader2, Wheat
+  ChevronLeft, Send, SkipForward, Loader2, Wheat, Trash2, Pencil, Crown, X, CreditCard
 } from "lucide-react";
 import { toast } from "sonner";
+import {
+  SidebarProvider,
+  Sidebar,
+  SidebarTrigger,
+  SidebarInset,
+} from "@/components/ui/sidebar";
 import {
   ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, PieChart, Pie, Cell
 } from "recharts";
@@ -56,6 +62,194 @@ function confidenceColor(c: "high" | "medium" | "low") {
 }
 
 // ---------------------------------------------------------------------------
+// RecipesTab sub-component (keeps recipe state isolated)
+// ---------------------------------------------------------------------------
+function RecipesTab({ profile }: { profile: { dietaryChoices?: string[] | null; allergies?: string[] | null } | null | undefined }) {
+  const [searchInput, setSearchInput] = useState("");
+  const [query, setQuery] = useState("healthy");
+  const [selectedRecipe, setSelectedRecipe] = useState<null | {
+    label: string; image: string; source: string; url: string;
+    calories: number; protein: number; carbs: number; fat: number; fiber: number;
+    totalTime: number; cuisineType: string[]; mealType: string[];
+    dietLabels: string[]; healthLabels: string[];
+    ingredientLines: string[];
+  }>(null);
+
+  const configuredQuery = trpc.recipes.isConfigured.useQuery();
+  const recipesQuery = trpc.recipes.search.useQuery(
+    { query },
+    { enabled: configuredQuery.data?.configured === true }
+  );
+
+  const isConfigured = configuredQuery.data?.configured;
+  const recipes = recipesQuery.data?.recipes ?? [];
+  const isLoading = recipesQuery.isLoading && configuredQuery.data?.configured;
+
+  function handleSearch(e: React.FormEvent) {
+    e.preventDefault();
+    if (searchInput.trim()) setQuery(searchInput.trim());
+  }
+
+  return (
+    <div className="space-y-8 max-w-5xl">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+        <div>
+          <h2 className="text-2xl sm:text-3xl font-serif font-bold tracking-tight">Curated Recipes</h2>
+          <p className="text-xs text-muted-foreground mt-1">
+            {isConfigured
+              ? "Live recipes from Edamam, filtered to your dietary profile."
+              : "Connect Edamam to get 2M+ recipes filtered to your dietary preferences."}
+          </p>
+        </div>
+        {isConfigured && (
+          <form onSubmit={handleSearch} className="flex gap-2">
+            <Input
+              value={searchInput}
+              onChange={e => setSearchInput(e.target.value)}
+              placeholder="Search recipes…"
+              className="w-48 h-8 text-xs"
+            />
+            <Button type="submit" size="sm" className="h-8 text-xs">Search</Button>
+          </form>
+        )}
+      </div>
+
+      {/* Not configured — show setup prompt */}
+      {!isConfigured && (
+        <Card className="border-primary/20 bg-primary/5">
+          <CardContent className="p-8 text-center space-y-4">
+            <div className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 text-primary mx-auto">
+              <Apple className="h-6 w-6" />
+            </div>
+            <h3 className="font-serif text-lg font-bold">Connect Edamam Recipe API</h3>
+            <p className="text-sm text-muted-foreground max-w-md mx-auto">
+              Edamam provides access to 2M+ recipes with full nutritional data, filtered automatically
+              by your dietary choices and allergens. A free developer account gives you 10,000 calls/month.
+            </p>
+            <ol className="text-xs text-left max-w-sm mx-auto space-y-2 text-muted-foreground">
+              <li className="flex gap-2"><span className="font-bold text-primary">1.</span> Sign up at <a href="https://developer.edamam.com" target="_blank" rel="noopener noreferrer" className="underline text-primary">developer.edamam.com</a></li>
+              <li className="flex gap-2"><span className="font-bold text-primary">2.</span> Create a "Recipe Search API" application</li>
+              <li className="flex gap-2"><span className="font-bold text-primary">3.</span> Copy your App ID and App Key</li>
+              <li className="flex gap-2"><span className="font-bold text-primary">4.</span> Add them as <code className="bg-muted px-1 rounded">EDAMAM_APP_ID</code> and <code className="bg-muted px-1 rounded">EDAMAM_APP_KEY</code> in Settings → Secrets</li>
+            </ol>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Loading state */}
+      {isLoading && (
+        <div className="flex items-center justify-center py-16">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        </div>
+      )}
+
+      {/* Recipe grid */}
+      {isConfigured && !isLoading && recipes.length > 0 && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+          {recipes.map(r => (
+            <Card
+              key={r.id}
+              className="border-border/60 overflow-hidden hover:shadow-md transition-all duration-200 cursor-pointer"
+              onClick={() => setSelectedRecipe(r)}
+            >
+              <div className="h-44 bg-muted relative overflow-hidden">
+                {r.image ? (
+                  <img src={r.image} alt={r.label} className="object-cover w-full h-full" />
+                ) : (
+                  <div className="flex items-center justify-center h-full text-muted-foreground">
+                    <Apple className="h-10 w-10 opacity-30" />
+                  </div>
+                )}
+                {r.totalTime > 0 && (
+                  <Badge className="absolute top-3 right-3 bg-black/60 text-white border-0 text-[10px]">
+                    <Clock className="h-3 w-3 mr-1" />{r.totalTime} min
+                  </Badge>
+                )}
+              </div>
+              <CardHeader className="p-4 pb-2">
+                <CardTitle className="font-serif text-sm font-bold leading-tight line-clamp-2">{r.label}</CardTitle>
+                <p className="text-[10px] text-muted-foreground mt-0.5">{r.source}</p>
+              </CardHeader>
+              <CardContent className="px-4 pb-4 pt-0">
+                <div className="grid grid-cols-4 gap-1 text-center">
+                  {[{ label: "Cal", val: r.calories }, { label: "Pro", val: r.protein + "g" }, { label: "Carb", val: r.carbs + "g" }, { label: "Fat", val: r.fat + "g" }].map(m => (
+                    <div key={m.label} className="bg-muted/40 rounded-lg py-1.5">
+                      <div className="text-xs font-bold">{m.val}</div>
+                      <div className="text-[9px] text-muted-foreground">{m.label}</div>
+                    </div>
+                  ))}
+                </div>
+                <div className="flex flex-wrap gap-1 mt-2">
+                  {r.healthLabels.slice(0, 3).map(h => (
+                    <span key={h} className="text-[9px] bg-emerald-50 text-emerald-700 border border-emerald-100 px-1.5 py-0.5 rounded-full">{h}</span>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
+
+      {/* Empty state */}
+      {isConfigured && !isLoading && recipes.length === 0 && (
+        <div className="text-center py-16 text-muted-foreground">
+          <Apple className="h-10 w-10 mx-auto opacity-30 mb-3" />
+          <p className="text-sm">No recipes found for "{query}". Try a different search.</p>
+        </div>
+      )}
+
+      {/* Recipe detail modal */}
+      {selectedRecipe && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4" onClick={() => setSelectedRecipe(null)}>
+          <Card className="w-full max-w-lg max-h-[90vh] overflow-y-auto border-border/60 shadow-2xl" onClick={e => e.stopPropagation()}>
+            <div className="h-52 bg-muted relative overflow-hidden">
+              {selectedRecipe.image && <img src={selectedRecipe.image} alt={selectedRecipe.label} className="object-cover w-full h-full" />}
+              <button onClick={() => setSelectedRecipe(null)} className="absolute top-3 right-3 bg-black/50 text-white rounded-full p-1 hover:bg-black/70">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <CardHeader className="p-5 border-b border-border/40">
+              <CardTitle className="font-serif text-lg font-bold">{selectedRecipe.label}</CardTitle>
+              <p className="text-xs text-muted-foreground">{selectedRecipe.source}</p>
+              <div className="grid grid-cols-5 gap-2 mt-3">
+                {[{ label: "Cal", val: selectedRecipe.calories }, { label: "Protein", val: selectedRecipe.protein + "g" }, { label: "Carbs", val: selectedRecipe.carbs + "g" }, { label: "Fat", val: selectedRecipe.fat + "g" }, { label: "Fiber", val: selectedRecipe.fiber + "g" }].map(m => (
+                  <div key={m.label} className="bg-muted/40 rounded-lg py-2 text-center">
+                    <div className="text-sm font-bold">{m.val}</div>
+                    <div className="text-[9px] text-muted-foreground">{m.label}</div>
+                  </div>
+                ))}
+              </div>
+            </CardHeader>
+            <CardContent className="p-5 space-y-4">
+              <div>
+                <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-2">Ingredients</h4>
+                <ul className="space-y-1">
+                  {selectedRecipe.ingredientLines.map((line, i) => (
+                    <li key={i} className="flex items-start gap-2 text-xs">
+                      <Check className="h-3.5 w-3.5 text-primary shrink-0 mt-0.5" />{line}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+              <a
+                href={selectedRecipe.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="block"
+              >
+                <Button className="w-full gap-2 text-xs">
+                  View Full Recipe <ChevronRight className="h-3.5 w-3.5" />
+                </Button>
+              </a>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Main component
 // ---------------------------------------------------------------------------
 export default function Home() {
@@ -89,9 +283,45 @@ export default function Home() {
   const analyzeTranscript = trpc.nutrition.analyzeTranscript.useMutation();
   const healthOverviewMutation = trpc.healthInsights.overview.useMutation();
   const healthChatMutation = trpc.healthInsights.chat.useMutation();
+  const deleteLogMutation = trpc.foodLogs.delete.useMutation({
+    onSuccess: () => {
+      utils.foodLogs.getByDate.invalidate();
+      utils.foodLogs.getAll.invalidate();
+      toast.success("Log entry deleted.");
+    },
+    onError: () => toast.error("Failed to delete log."),
+  });
+  const updateLogMutation = trpc.foodLogs.update.useMutation({
+    onSuccess: () => {
+      utils.foodLogs.getByDate.invalidate();
+      utils.foodLogs.getAll.invalidate();
+      setEditingLogId(null);
+      toast.success("Log updated.");
+    },
+    onError: () => toast.error("Failed to update log."),
+  });
+  const downgradeToFreeMutation = trpc.billing.downgradeToFree.useMutation({
+    onSuccess: () => {
+      subscriptionQuery.refetch();
+      toast.success("Downgraded to Free plan.");
+    },
+    onError: () => toast.error("Failed to downgrade. Please try again."),
+  });
+  const checkoutMutation = trpc.billing.createCheckoutSession.useMutation({
+    onSuccess: (data) => {
+      if (data.checkoutUrl) window.open(data.checkoutUrl, "_blank");
+    },
+    onError: () => toast.error("Could not start checkout. Please try again."),
+  });
+  const subscriptionQuery = trpc.billing.getSubscription.useQuery(undefined, {
+    enabled: isAuthenticated,
+  });
 
   // ---- UI state ----
-  const [activeTab, setActiveTab] = useState<"dashboard" | "voice-logger" | "calendar" | "recipes" | "travel" | "integrations">("dashboard");
+  const [activeTab, setActiveTab] = useState<"dashboard" | "voice-logger" | "calendar" | "recipes" | "travel" | "integrations" | "billing">("dashboard");
+  const [editingLogId, setEditingLogId] = useState<number | null>(null);
+  const [editForm, setEditForm] = useState<{ foodName: string; quantity: string; calories: string; protein: string; carbs: string; fat: string; fiber: string }>({ foodName: "", quantity: "", calories: "", protein: "", carbs: "", fat: "", fiber: "" });
+  const [showUpgradeModal, setShowUpgradeModal] = useState(false);
 
   // ---- onboarding wizard ----
   const [onboardStep, setOnboardStep] = useState<OnboardStep>("age");
@@ -302,8 +532,14 @@ export default function Home() {
           logSaved: true,
         });
       }
-    } catch {
-      addChatMsg({ role: "ai", text: "Sorry, analysis failed. Please try again." });
+    } catch (err: any) {
+      const msg = err?.message ?? "";
+      if (msg.includes("AI call limit") || msg.includes("Upgrade")) {
+        setShowUpgradeModal(true);
+        addChatMsg({ role: "ai", text: "You've reached your free tier limit (10 AI logs/month). Upgrade to Clover Plus for unlimited logging! 🌿" });
+      } else {
+        addChatMsg({ role: "ai", text: "Sorry, analysis failed. Please try again." });
+      }
     } finally {
       setIsAnalyzing(false);
     }
@@ -602,10 +838,12 @@ export default function Home() {
   // 3. MAIN APP
   // ---------------------------------------------------------------------------
   return (
-    <div className="min-h-screen flex flex-col md:flex-row bg-background text-foreground font-sans">
+    <SidebarProvider>
+    <div className="min-h-screen flex flex-col md:flex-row bg-background text-foreground font-sans w-full">
 
-      {/* ---- Sidebar ---- */}
-      <aside className="w-full md:w-64 bg-card border-r border-border/40 flex flex-col justify-between shrink-0">
+      {/* ---- Sidebar (desktop fixed, mobile drawer) ---- */}
+      <Sidebar collapsible="offcanvas" className="border-r border-border/40">
+      <aside className="w-full bg-card flex flex-col justify-between h-full">
         <div className="p-6 space-y-6">
           <div className="flex items-center gap-2 font-serif text-xl font-bold text-primary">
             <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
@@ -636,6 +874,7 @@ export default function Home() {
               { id: "recipes" as const, label: "Curated Recipes", icon: Apple, pulse: false },
               { id: "travel" as const, label: "Travel Sourcing", icon: Compass, pulse: false },
               { id: "integrations" as const, label: "Integrations", icon: Smartphone, pulse: false },
+          { id: "billing" as const, label: "Manage Plan", icon: CreditCard, pulse: false },
             ]).map(({ id, label, icon: Icon, pulse }) => (
               <Button
                 key={id}
@@ -650,7 +889,17 @@ export default function Home() {
           </nav>
         </div>
 
-        <div className="p-6 border-t border-border/40">
+        <div className="p-6 border-t border-border/40 space-y-3">
+          {/* Subscription badge */}
+          {subscriptionQuery.data && (
+            <div className="flex items-center justify-between text-[10px] text-muted-foreground bg-muted/30 rounded-lg px-3 py-2">
+              <span className="flex items-center gap-1.5">
+                <Crown className="h-3 w-3 text-amber-500" />
+                <span className="font-semibold capitalize">{subscriptionQuery.data.tier}</span>
+              </span>
+              <span>{subscriptionQuery.data.aiCallsUsed} / {subscriptionQuery.data.aiCallsLimit === Infinity ? "∞" : subscriptionQuery.data.aiCallsLimit} AI calls</span>
+            </div>
+          )}
           <Button
             variant="ghost"
             size="sm"
@@ -661,9 +910,22 @@ export default function Home() {
           </Button>
         </div>
       </aside>
+      </Sidebar>
 
       {/* ---- Main content ---- */}
-      <main className="flex-1 bg-muted/10 p-6 md:p-10 overflow-y-auto">
+      <SidebarInset className="flex-1 bg-muted/10 overflow-y-auto">
+        {/* Mobile sticky header with hamburger */}
+        <header className="sticky top-0 z-20 flex md:hidden items-center gap-3 bg-background/95 backdrop-blur border-b border-border/40 px-4 py-3">
+          <SidebarTrigger className="h-8 w-8" />
+          <div className="flex items-center gap-2 font-serif font-bold text-primary">
+            <div className="flex h-6 w-6 items-center justify-center rounded-md bg-primary text-primary-foreground">
+              <Leaf className="h-4 w-4" />
+            </div>
+            <span className="text-sm">Clover AI</span>
+          </div>
+          <div className="ml-auto text-xs text-muted-foreground capitalize font-medium">{activeTab.replace("-", " ")}</div>
+        </header>
+        <div className="p-6 md:p-10">
 
         {/* ===== A. DASHBOARD ===== */}
         {activeTab === "dashboard" && (
@@ -776,31 +1038,124 @@ export default function Home() {
                 <div className="space-y-3">
                   {dbLogs.map(log => (
                     <Card key={log.id} className="border-border/60">
-                      <CardContent className="p-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-                        <div className="space-y-1">
-                          <div className="font-bold text-sm flex items-center gap-2">
-                            {log.foodName}
-                            {(log.allergensDetected as string[]).length > 0 && (
-                              <Badge variant="destructive" className="text-[9px] px-1.5 py-0.5">
-                                ⚠️ {(log.allergensDetected as string[]).join(", ")}
-                              </Badge>
-                            )}
-                            {log.confidence && (
-                              <Badge variant="outline" className={`text-[9px] px-1.5 py-0.5 ${confidenceColor(log.confidence as "high" | "medium" | "low")}`}>
-                                {log.confidence}
-                              </Badge>
-                            )}
+                      <CardContent className="p-4">
+                        {editingLogId === log.id ? (
+                          /* ---- Inline edit form ---- */
+                          <div className="space-y-3">
+                            <div className="grid grid-cols-2 gap-2">
+                              <div className="col-span-2">
+                                <label className="text-[10px] text-muted-foreground uppercase tracking-wider">Food Name</label>
+                                <Input value={editForm.foodName} onChange={e => setEditForm(p => ({ ...p, foodName: e.target.value }))} className="h-8 text-sm mt-0.5" />
+                              </div>
+                              <div>
+                                <label className="text-[10px] text-muted-foreground uppercase tracking-wider">Qty</label>
+                                <Input value={editForm.quantity} onChange={e => setEditForm(p => ({ ...p, quantity: e.target.value }))} className="h-8 text-sm mt-0.5" />
+                              </div>
+                              <div>
+                                <label className="text-[10px] text-muted-foreground uppercase tracking-wider">Calories</label>
+                                <Input type="number" value={editForm.calories} onChange={e => setEditForm(p => ({ ...p, calories: e.target.value }))} className="h-8 text-sm mt-0.5" />
+                              </div>
+                              <div>
+                                <label className="text-[10px] text-muted-foreground uppercase tracking-wider">Protein (g)</label>
+                                <Input type="number" value={editForm.protein} onChange={e => setEditForm(p => ({ ...p, protein: e.target.value }))} className="h-8 text-sm mt-0.5" />
+                              </div>
+                              <div>
+                                <label className="text-[10px] text-muted-foreground uppercase tracking-wider">Carbs (g)</label>
+                                <Input type="number" value={editForm.carbs} onChange={e => setEditForm(p => ({ ...p, carbs: e.target.value }))} className="h-8 text-sm mt-0.5" />
+                              </div>
+                              <div>
+                                <label className="text-[10px] text-muted-foreground uppercase tracking-wider">Fat (g)</label>
+                                <Input type="number" value={editForm.fat} onChange={e => setEditForm(p => ({ ...p, fat: e.target.value }))} className="h-8 text-sm mt-0.5" />
+                              </div>
+                              <div>
+                                <label className="text-[10px] text-muted-foreground uppercase tracking-wider">Fiber (g)</label>
+                                <Input type="number" value={editForm.fiber} onChange={e => setEditForm(p => ({ ...p, fiber: e.target.value }))} className="h-8 text-sm mt-0.5" />
+                              </div>
+                            </div>
+                            <div className="flex gap-2 justify-end">
+                              <Button size="sm" variant="ghost" className="text-xs" onClick={() => setEditingLogId(null)}>
+                                <X className="h-3.5 w-3.5 mr-1" /> Cancel
+                              </Button>
+                              <Button
+                                size="sm"
+                                className="text-xs"
+                                disabled={updateLogMutation.isPending}
+                                onClick={() => updateLogMutation.mutate({
+                                  id: log.id,
+                                  foodName: editForm.foodName,
+                                  quantity: editForm.quantity,
+                                  calories: parseFloat(editForm.calories) || 0,
+                                  protein: parseFloat(editForm.protein) || 0,
+                                  carbs: parseFloat(editForm.carbs) || 0,
+                                  fat: parseFloat(editForm.fat) || 0,
+                                  fiber: parseFloat(editForm.fiber) || 0,
+                                })}
+                              >
+                                {updateLogMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5 mr-1" />} Save
+                              </Button>
+                            </div>
                           </div>
-                          {log.quantity && <p className="text-xs text-muted-foreground">Qty: {log.quantity}</p>}
-                          {log.rawSpeech && <p className="text-[10px] text-muted-foreground italic">"{log.rawSpeech}"</p>}
-                        </div>
-                        <div className="flex gap-3 text-xs font-mono shrink-0">
-                          <div><strong>{Math.round(Number(log.calories))}</strong> kcal</div>
-                          <div><strong>{Math.round(Number(log.protein))}g</strong> P</div>
-                          <div><strong>{Math.round(Number(log.carbs))}g</strong> C</div>
-                          <div><strong>{Math.round(Number(log.fat))}g</strong> F</div>
-                          <div className="text-violet-600"><strong>{Math.round(Number(log.fiber))}g</strong> Fb</div>
-                        </div>
+                        ) : (
+                          /* ---- Normal view ---- */
+                          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                            <div className="space-y-1 flex-1 min-w-0">
+                              <div className="font-bold text-sm flex items-center gap-2 flex-wrap">
+                                {log.foodName}
+                                {(log.allergensDetected as string[]).length > 0 && (
+                                  <Badge variant="destructive" className="text-[9px] px-1.5 py-0.5">
+                                    ⚠️ {(log.allergensDetected as string[]).join(", ")}
+                                  </Badge>
+                                )}
+                                {log.confidence && (
+                                  <Badge variant="outline" className={`text-[9px] px-1.5 py-0.5 ${confidenceColor(log.confidence as "high" | "medium" | "low")}`}>
+                                    {log.confidence}
+                                  </Badge>
+                                )}
+                              </div>
+                              {log.quantity && <p className="text-xs text-muted-foreground">Qty: {log.quantity}</p>}
+                              {log.rawSpeech && <p className="text-[10px] text-muted-foreground italic truncate max-w-xs">"{log.rawSpeech}"</p>}
+                            </div>
+                            <div className="flex items-center gap-3">
+                              <div className="flex gap-3 text-xs font-mono shrink-0">
+                                <div><strong>{Math.round(Number(log.calories))}</strong> kcal</div>
+                                <div><strong>{Math.round(Number(log.protein))}g</strong> P</div>
+                                <div className="hidden sm:block"><strong>{Math.round(Number(log.carbs))}g</strong> C</div>
+                                <div className="hidden sm:block"><strong>{Math.round(Number(log.fat))}g</strong> F</div>
+                                <div className="hidden sm:block text-violet-600"><strong>{Math.round(Number(log.fiber))}g</strong> Fb</div>
+                              </div>
+                              <div className="flex gap-1 shrink-0">
+                                <Button
+                                  size="icon"
+                                  variant="ghost"
+                                  className="h-7 w-7 text-muted-foreground hover:text-foreground"
+                                  onClick={() => {
+                                    setEditingLogId(log.id);
+                                    setEditForm({
+                                      foodName: log.foodName,
+                                      quantity: log.quantity ?? "",
+                                      calories: String(Math.round(Number(log.calories))),
+                                      protein: String(Math.round(Number(log.protein))),
+                                      carbs: String(Math.round(Number(log.carbs))),
+                                      fat: String(Math.round(Number(log.fat))),
+                                      fiber: String(Math.round(Number(log.fiber))),
+                                    });
+                                  }}
+                                >
+                                  <Pencil className="h-3.5 w-3.5" />
+                                </Button>
+                                <Button
+                                  size="icon"
+                                  variant="ghost"
+                                  className="h-7 w-7 text-muted-foreground hover:text-destructive"
+                                  disabled={deleteLogMutation.isPending}
+                                  onClick={() => deleteLogMutation.mutate({ id: log.id })}
+                                >
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                </Button>
+                              </div>
+                            </div>
+                          </div>
+                        )}
                       </CardContent>
                     </Card>
                   ))}
@@ -1125,41 +1480,7 @@ export default function Home() {
 
         {/* ===== D. CURATED RECIPES ===== */}
         {activeTab === "recipes" && (
-          <div className="space-y-8 max-w-5xl">
-            <div>
-              <h2 className="text-2xl sm:text-3xl font-serif font-bold tracking-tight">Curated Recipes</h2>
-              <p className="text-xs text-muted-foreground mt-1">Grounded in seasonal USDA Zone 5b crop calendars and customised to your dietary preferences.</p>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              {[
-                { img: "https://images.unsplash.com/photo-1525351484163-7529414344d8?auto=format&fit=crop&w=600&q=80", label: "Breakfast", title: "Spring Farmstand Scramble", time: "20 mins", items: ["4 Pastured Eggs", "2 cups Spinach", "1 cup Shiitake Mushrooms"] },
-                { img: "https://images.unsplash.com/photo-1590301157890-4810ed352733?auto=format&fit=crop&w=600&q=80", label: "Dinner", title: "Heirloom Tomato & Basil Galette", time: "55 mins", items: ["3 Heirloom Tomatoes", "1 tbsp Wildflower Honey"] },
-                { img: "https://images.unsplash.com/photo-1512621776951-a57141f2eefd?auto=format&fit=crop&w=600&q=80", label: "Dinner", title: "Orchard Apple & Kale Warm Salad", time: "25 mins", items: ["4 cups Baby Kale", "1 Macintosh Apple"] },
-              ].map(r => (
-                <Card key={r.title} className="border-border/60 overflow-hidden hover:shadow-md transition-all duration-300">
-                  <div className="h-44 bg-muted relative">
-                    <img src={r.img} alt={r.title} className="object-cover w-full h-full" />
-                    <Badge className="absolute top-3 right-3 bg-primary text-primary-foreground text-[10px]">{r.label}</Badge>
-                  </div>
-                  <CardHeader className="p-4">
-                    <CardTitle className="font-serif text-base font-bold leading-tight">{r.title}</CardTitle>
-                    <div className="flex items-center gap-2 text-xs text-muted-foreground mt-1">
-                      <Clock className="h-3.5 w-3.5" />{r.time}
-                    </div>
-                  </CardHeader>
-                  <CardContent className="px-4 pb-4 pt-0">
-                    <ul className="space-y-1 text-xs text-muted-foreground">
-                      {r.items.map(item => (
-                        <li key={item} className="flex items-center gap-1.5">
-                          <Check className="h-3.5 w-3.5 text-primary shrink-0" /> {item}
-                        </li>
-                      ))}
-                    </ul>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          </div>
+          <RecipesTab profile={profile} />
         )}
 
         {/* ===== E. TRAVEL SOURCING ===== */}
@@ -1240,7 +1561,210 @@ export default function Home() {
           </div>
         )}
 
-      </main>
-    </div>
+        {/* ===== G. BILLING / MANAGE PLAN ===== */}
+        {activeTab === "billing" && (
+          <div className="max-w-3xl space-y-8">
+            <div>
+              <h2 className="text-2xl sm:text-3xl font-serif font-bold tracking-tight">Manage Your Plan</h2>
+              <p className="text-xs text-muted-foreground mt-1">Upgrade or manage your Clover subscription.</p>
+            </div>
+
+            {/* Current plan status */}
+            {subscriptionQuery.data && (
+              <Card className="border-primary/30 bg-primary/5">
+                <CardContent className="p-5 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <Crown className="h-5 w-5 text-amber-500" />
+                      <span className="font-serif font-bold text-base capitalize">Current Plan: Clover {subscriptionQuery.data.tier}</span>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      AI logs used this month: <strong>{subscriptionQuery.data.aiCallsUsed}</strong> / {subscriptionQuery.data.aiCallsLimit === Infinity ? "Unlimited" : subscriptionQuery.data.aiCallsLimit}
+                    </p>
+                  </div>
+                  {subscriptionQuery.data.tier !== "free" && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="text-xs text-destructive border-destructive/30 hover:bg-destructive/5"
+                      onClick={() => {
+                        if (confirm("Downgrade to the free plan? You will lose unlimited AI logging.")) {
+                          downgradeToFreeMutation.mutate(undefined);
+                        }
+                      }}
+                    >
+                      Downgrade to Free
+                    </Button>
+                  )}
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Plan cards */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+              {([
+                {
+                  tier: "free" as const,
+                  name: "Clover Free",
+                  price: "$0",
+                  period: "forever",
+                  features: ["10 AI voice logs / month", "Basic dashboard", "7-day history"],
+                  cta: "Current Plan",
+                  highlight: false,
+                },
+                {
+                  tier: "plus" as const,
+                  name: "Clover Plus",
+                  price: "$7.99",
+                  period: "/ month",
+                  features: ["Unlimited AI voice logs", "Full history & calendar", "AI health overview", "Recipe recommendations"],
+                  cta: "Upgrade to Plus",
+                  highlight: true,
+                },
+                {
+                  tier: "pro" as const,
+                  name: "Clover Pro",
+                  price: "$14.99",
+                  period: "/ month",
+                  features: ["Everything in Plus", "Travel sourcing", "Weekly email digest", "Priority AI", "CSV export"],
+                  cta: "Upgrade to Pro",
+                  highlight: false,
+                },
+              ]).map(plan => (
+                <Card key={plan.tier} className={`border-border/60 relative ${plan.highlight ? "border-primary ring-1 ring-primary/30" : ""}`}>
+                  {plan.highlight && (
+                    <div className="absolute -top-3 left-1/2 -translate-x-1/2">
+                      <Badge className="bg-primary text-primary-foreground text-[10px] px-3">Most Popular</Badge>
+                    </div>
+                  )}
+                  <CardHeader className="p-5 border-b border-border/40">
+                    <CardTitle className="font-serif text-base font-bold">{plan.name}</CardTitle>
+                    <div className="mt-2">
+                      <span className="text-3xl font-bold">{plan.price}</span>
+                      <span className="text-xs text-muted-foreground ml-1">{plan.period}</span>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="p-5 space-y-4">
+                    <ul className="space-y-2">
+                      {plan.features.map(f => (
+                        <li key={f} className="flex items-center gap-2 text-xs">
+                          <Check className="h-3.5 w-3.5 text-primary shrink-0" /> {f}
+                        </li>
+                      ))}
+                    </ul>
+                    {plan.tier === "free" ? (
+                      <Button variant="outline" size="sm" className="w-full text-xs" disabled>
+                        {subscriptionQuery.data?.tier === "free" ? "Current Plan" : "Downgraded"}
+                      </Button>
+                    ) : (
+                      <Button
+                        size="sm"
+                        className="w-full text-xs"
+                        variant={plan.highlight ? "default" : "outline"}
+                        disabled={checkoutMutation.isPending || subscriptionQuery.data?.tier === plan.tier}
+                        onClick={() => {
+                          if (subscriptionQuery.data?.tier === plan.tier) return;
+                          toast.info("Opening secure checkout...");
+                          checkoutMutation.mutate({ tier: plan.tier, billingCycle: "monthly" });
+                        }}
+                      >
+                        {checkoutMutation.isPending ? (
+                          <><Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> Processing...</>
+                        ) : subscriptionQuery.data?.tier === plan.tier ? (
+                          "Current Plan"
+                        ) : (
+                          plan.cta
+                        )}
+                      </Button>
+                    )}
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+
+            <p className="text-[10px] text-muted-foreground text-center">
+              Test card: 4242 4242 4242 4242 · Any future date · Any CVC. Payments are processed securely by Stripe.
+            </p>
+          </div>
+        )}
+
+      </div>{/* end p-6 inner div */}
+      </SidebarInset>
+
+      {/* ===== UPGRADE MODAL ===== */}
+      {showUpgradeModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+          <Card className="w-full max-w-md border-primary/30 shadow-2xl">
+            <CardHeader className="p-6 border-b border-border/40">
+              <div className="flex items-start justify-between">
+                <div className="space-y-1">
+                  <CardTitle className="font-serif text-xl font-bold flex items-center gap-2">
+                    <Crown className="h-5 w-5 text-amber-500" /> Unlock Unlimited Logging
+                  </CardTitle>
+                  <CardDescription className="text-xs">
+                    You've used all 10 free AI logs this month. Upgrade to keep tracking.
+                  </CardDescription>
+                </div>
+                <Button variant="ghost" size="icon" className="h-8 w-8 -mt-1 -mr-1" onClick={() => setShowUpgradeModal(false)}>
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent className="p-6 space-y-4">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="p-4 rounded-xl border border-primary/30 bg-primary/5 space-y-2">
+                  <div className="font-serif font-bold text-sm">Clover Plus</div>
+                  <div className="text-2xl font-bold">$7.99<span className="text-xs text-muted-foreground font-normal">/mo</span></div>
+                  <ul className="space-y-1 text-xs text-muted-foreground">
+                    <li className="flex items-center gap-1"><Check className="h-3 w-3 text-primary" /> Unlimited AI logs</li>
+                    <li className="flex items-center gap-1"><Check className="h-3 w-3 text-primary" /> Full history</li>
+                    <li className="flex items-center gap-1"><Check className="h-3 w-3 text-primary" /> AI health overview</li>
+                  </ul>
+                  <Button
+                    size="sm"
+                    className="w-full text-xs mt-2"
+                    disabled={checkoutMutation.isPending}
+                    onClick={() => {
+                      setShowUpgradeModal(false);
+                      toast.info("Opening secure checkout...");
+                      checkoutMutation.mutate({ tier: "plus", billingCycle: "monthly" });
+                    }}
+                  >
+                    {checkoutMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Upgrade to Plus"}
+                  </Button>
+                </div>
+                <div className="p-4 rounded-xl border border-border/60 space-y-2">
+                  <div className="font-serif font-bold text-sm">Clover Pro</div>
+                  <div className="text-2xl font-bold">$14.99<span className="text-xs text-muted-foreground font-normal">/mo</span></div>
+                  <ul className="space-y-1 text-xs text-muted-foreground">
+                    <li className="flex items-center gap-1"><Check className="h-3 w-3 text-primary" /> Everything in Plus</li>
+                    <li className="flex items-center gap-1"><Check className="h-3 w-3 text-primary" /> Travel sourcing</li>
+                    <li className="flex items-center gap-1"><Check className="h-3 w-3 text-primary" /> Priority AI</li>
+                  </ul>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="w-full text-xs mt-2"
+                    disabled={checkoutMutation.isPending}
+                    onClick={() => {
+                      setShowUpgradeModal(false);
+                      toast.info("Opening secure checkout...");
+                      checkoutMutation.mutate({ tier: "pro", billingCycle: "monthly" });
+                    }}
+                  >
+                    Upgrade to Pro
+                  </Button>
+                </div>
+              </div>
+              <p className="text-[10px] text-muted-foreground text-center">
+                Payments processed securely by Stripe. Cancel anytime.
+              </p>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+    </div>{/* end flex row */}
+    </SidebarProvider>
   );
 }

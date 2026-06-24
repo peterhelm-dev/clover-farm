@@ -11,9 +11,15 @@ vi.mock("./_core/llm", () => ({
 import { invokeLLM } from "./_core/llm";
 import { nutritionRouter } from "./routers/nutrition";
 
-// Helper: create a caller without auth context (publicProcedure)
+// Helper: create a caller with a mock authenticated user context
+// (analyzeTranscript is now a protectedProcedure that enforces AI call limits)
 function createCaller() {
-  return nutritionRouter.createCaller({} as any);
+  const mockCtx = {
+    user: { id: 1, name: "Test User", email: "test@example.com", role: "user" as const },
+    req: {} as any,
+    res: {} as any,
+  };
+  return nutritionRouter.createCaller(mockCtx as any);
 }
 
 // Helper: build a mock LLM response with the given payload

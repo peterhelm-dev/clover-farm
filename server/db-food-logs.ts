@@ -46,6 +46,36 @@ export async function getAllFoodLogs(userId: number, limitRows = 200) {
     .limit(limitRows);
 }
 
+export async function deleteFoodLog(id: number, userId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db
+    .delete(foodLogs)
+    .where(and(eq(foodLogs.id, id), eq(foodLogs.userId, userId)));
+}
+
+export async function updateFoodLog(
+  id: number,
+  userId: number,
+  data: {
+    foodName?: string;
+    quantity?: string;
+    calories?: string;
+    protein?: string;
+    carbs?: string;
+    fat?: string;
+    fiber?: string;
+    notes?: string;
+  }
+) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db
+    .update(foodLogs)
+    .set(data)
+    .where(and(eq(foodLogs.id, id), eq(foodLogs.userId, userId)));
+}
+
 // ---------------------------------------------------------------------------
 // User profile helpers
 // ---------------------------------------------------------------------------
