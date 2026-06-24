@@ -5,6 +5,7 @@ import { publicProcedure, router } from "./_core/trpc";
 import { nutritionRouter } from "./routers/nutrition";
 import { foodLogsRouter } from "./routers/foodLogs";
 import { healthInsightsRouter } from "./routers/healthInsights";
+import { billingRouter } from "./routers/billing";
 
 export const appRouter = router({
     // if you need to use socket.io, read and register route in server/_core/index.ts, all api should start with '/api/' so that the gateway can route correctly
@@ -23,6 +24,7 @@ export const appRouter = router({
   nutrition: nutritionRouter,
   foodLogs: foodLogsRouter,
   healthInsights: healthInsightsRouter,
+  billing: billingRouter,
 
   // TODO: add feature routers here, e.g.
   // todo: router({

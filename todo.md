@@ -30,3 +30,16 @@
 - [x] Replace clarifying question text input with mic button (same button) and add Skip option
 - [x] Add AI health overview panel on dashboard (summary + improvement tips)
 - [x] Add data-aware AI chat on dashboard (bottom-right, can ask questions about food logs)
+
+## Market Readiness Sprint
+- [x] Add subscriptions table (userId, tier, stripeCustomerId, stripeSubscriptionId, aiCallsUsedThisMonth, periodStart)
+- [x] Add Stripe billing with Free / Plus / Pro tiers
+- [x] Enforce AI call limits per tier (10 free, unlimited paid)
+- [ ] Add delete food log entry (trash icon on each log card)
+- [ ] Add edit food log entry (edit icon opens inline form)
+- [ ] Mobile-first layout pass on voice logger and dashboard
+- [ ] Connect Edamam recipe API filtered by user dietary profile
+- [ ] Add Sentry error monitoring
+- [ ] Add rate limiting on AI endpoints
+- [ ] Add upgrade prompt UI when free tier limit is reached
+- [ ] Add subscription management page (current plan, upgrade/downgrade, cancel)

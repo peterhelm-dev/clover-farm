@@ -1,7 +1,9 @@
 import { invokeLLM } from "../_core/llm";
-import { publicProcedure, router } from "../_core/trpc";
+import { publicProcedure, protectedProcedure, router } from "../_core/trpc";
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
+import { getSubscriptionByUserId, getOrCreateSubscription, incrementAICallsUsed } from "../db-subscriptions";
+import { getAICallLimit } from "../products";
 
 /**
  * The structured output schema the LLM must return.
@@ -100,8 +102,9 @@ export const nutritionRouter = router({
   /**
    * Analyzes a food description transcript and returns structured nutritional data.
    * Accepts an optional `context` string (e.g. a previous clarifying answer) to refine estimates.
+   * Enforces AI call limits based on subscription tier.
    */
-  analyzeTranscript: publicProcedure
+  analyzeTranscript: protectedProcedure
     .input(
       z.object({
         transcript: z
@@ -114,8 +117,20 @@ export const nutritionRouter = router({
         knownAllergies: z.array(z.string()).optional(),
       })
     )
-    .mutation(async ({ input }) => {
+    .mutation(async ({ ctx, input }) => {
       const { transcript, clarificationContext, knownAllergies } = input;
+
+      // Check AI call limit for this user's subscription tier
+      // Auto-create free subscription if it doesn't exist
+      const sub = await getOrCreateSubscription(ctx.user.id);
+
+      const limit = getAICallLimit(sub.tier);
+      if (sub.aiCallsUsedThisMonth >= limit) {
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: `You have reached your AI call limit for this month (${limit} calls). Upgrade to Clover Plus for unlimited logs.`,
+        });
+      }
 
       // Build the user message, incorporating any clarification context
       let userMessage = `Food description: "${transcript}"`;
@@ -183,6 +198,9 @@ export const nutritionRouter = router({
           message: "AI response could not be parsed as JSON.",
         });
       }
+
+      // Increment AI calls used for this user
+      await incrementAICallsUsed(ctx.user.id, 1);
 
       return parsed;
     }),

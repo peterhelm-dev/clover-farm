@@ -71,3 +71,21 @@ export const foodLogs = mysqlTable("foodLogs", {
 
 export type FoodLog = typeof foodLogs.$inferSelect;
 export type InsertFoodLog = typeof foodLogs.$inferInsert;
+
+// ---------------------------------------------------------------------------
+// Subscriptions (Stripe billing)
+// ---------------------------------------------------------------------------
+export const subscriptions = mysqlTable("subscriptions", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull().unique(),
+  tier: mysqlEnum("tier", ["free", "plus", "pro"]).default("free").notNull(),
+  stripeCustomerId: varchar("stripeCustomerId", { length: 128 }),
+  stripeSubscriptionId: varchar("stripeSubscriptionId", { length: 128 }),
+  aiCallsUsedThisMonth: int("aiCallsUsedThisMonth").default(0).notNull(),
+  periodStart: timestamp("periodStart").defaultNow().notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type Subscription = typeof subscriptions.$inferSelect;
+export type InsertSubscription = typeof subscriptions.$inferInsert;

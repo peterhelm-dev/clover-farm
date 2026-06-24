@@ -15,6 +15,13 @@
       "when": 1780089610801,
       "tag": "0001_complex_nitro",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "5",
+      "when": 1781884739517,
+      "tag": "0002_absurd_jack_power",
+      "breakpoints": true
     }
   ]
 }
