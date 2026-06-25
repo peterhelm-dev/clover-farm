@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { adminProcedure, router } from "../_core/trpc";
 import { getDb } from "../db";
-import { users, subscriptions, waitlist, referrals } from "../../drizzle/schema";
+import { users, subscriptions, waitlist, referrals, appSettings } from "../../drizzle/schema";
 import { eq, desc, count, gte, sql } from "drizzle-orm";
 
 export const adminRouter = router({
@@ -203,4 +203,34 @@ export const adminRouter = router({
       .limit(200);
     return rows;
   }),
+
+  /** Get current app settings (invite-only mode, etc.) */
+  getSettings: adminProcedure.query(async () => {
+    const db = await getDb();
+    if (!db) return { inviteOnly: false };
+    const [settings] = await db.select().from(appSettings).limit(1);
+    return {
+      inviteOnly: (settings?.inviteOnly ?? 0) === 1,
+    };
+  }),
+
+  /** Toggle invite-only mode */
+  toggleInviteOnly: adminProcedure
+    .input(z.object({ enabled: z.boolean() }))
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new Error("Database not available");
+      const [existing] = await db.select().from(appSettings).limit(1);
+      if (existing) {
+        await db
+          .update(appSettings)
+          .set({ inviteOnly: input.enabled ? 1 : 0 })
+          .where(eq(appSettings.id, existing.id));
+      } else {
+        await db.insert(appSettings).values({
+          inviteOnly: input.enabled ? 1 : 0,
+        });
+      }
+      return { success: true, inviteOnly: input.enabled };
+    }),
 });

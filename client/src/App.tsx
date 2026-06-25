@@ -8,6 +8,8 @@ import Home from "./pages/Home";
 import LandingPage from "./pages/LandingPage";
 import AdminDashboard from "./pages/AdminDashboard";
 import BetaInvitePage from "./pages/BetaInvitePage";
+import PrivacyPolicy from "./pages/PrivacyPolicy";
+import TermsOfService from "./pages/TermsOfService";
 import FeedbackButton from "./components/FeedbackButton";
 import { useAuth } from "./_core/hooks/useAuth";
 
@@ -43,6 +45,8 @@ function Router() {
       <Route path="/" component={RootRoute} />
       <Route path="/admin" component={AdminDashboard} />
       <Route path="/beta/:code" component={BetaInvitePage} />
+      <Route path="/privacy" component={PrivacyPolicy} />
+      <Route path="/tos" component={TermsOfService} />
       <Route path="/404" component={NotFound} />
       {/* Final fallback route */}
       <Route component={NotFound} />

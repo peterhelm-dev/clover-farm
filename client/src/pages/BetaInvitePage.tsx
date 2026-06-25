@@ -36,9 +36,8 @@ export default function BetaInvitePage() {
 
   const handleRedeem = () => {
     if (!isAuthenticated) {
-      // Redirect to login, come back here after
-      sessionStorage.setItem("betaRedirectCode", code);
-      window.location.href = getLoginUrl();
+      // Redirect to login, come back here after (encode returnPath + inviteCode in OAuth state)
+      window.location.href = getLoginUrl(`/beta/${code}`, code);
       return;
     }
     redeemMutation.mutate({ code });

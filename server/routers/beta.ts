@@ -3,6 +3,7 @@ import { adminProcedure, protectedProcedure, publicProcedure, router } from "../
 import { getDb } from "../db";
 import { betaInvites, betaFeedback, users, subscriptions } from "../../drizzle/schema";
 import { eq, desc, count, isNull, isNotNull } from "drizzle-orm";
+import { notifyOwner } from "../_core/notification";
 
 /** Generate a random invite code like BETA-XXXXXXXX */
 function generateInviteCode(): string {
@@ -175,6 +176,19 @@ export const betaRouter = router({
         category: input.category,
         message: input.message,
       });
+
+      // Notify the owner so they don't have to poll the admin panel
+      const categoryLabel: Record<string, string> = {
+        general: "General",
+        bug: "Bug",
+        feature_request: "Feature Request",
+        ux: "UX / Design",
+        performance: "Performance",
+      };
+      await notifyOwner({
+        title: `⭐ New beta feedback (${input.rating}/5 — ${categoryLabel[input.category] ?? input.category})`,
+        content: `From: ${ctx.user.name ?? ctx.user.email ?? "Unknown user"}\n\n${input.message}`,
+      }).catch(() => { /* non-critical — don't fail the request if notification fails */ });
 
       return { success: true };
     }),

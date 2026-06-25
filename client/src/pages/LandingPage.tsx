@@ -630,6 +630,8 @@ function Footer() {
             <a href="#pricing" className="hover:text-foreground transition-colors">Pricing</a>
             <a href="#testimonials" className="hover:text-foreground transition-colors">Reviews</a>
             <a href={getLoginUrl()} className="hover:text-foreground transition-colors">Sign in</a>
+            <a href="/privacy" className="hover:text-foreground transition-colors">Privacy Policy</a>
+            <a href="/tos" className="hover:text-foreground transition-colors">Terms of Service</a>
           </nav>
 
           <p className="text-xs text-muted-foreground">

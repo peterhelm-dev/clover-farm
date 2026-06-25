@@ -170,3 +170,16 @@ export const betaFeedback = mysqlTable("betaFeedback", {
 
 export type BetaFeedback = typeof betaFeedback.$inferSelect;
 export type InsertBetaFeedback = typeof betaFeedback.$inferInsert;
+
+// ---------------------------------------------------------------------------
+// App Settings (admin-configurable app-wide settings)
+// ---------------------------------------------------------------------------
+export const appSettings = mysqlTable("appSettings", {
+  id: int("id").autoincrement().primaryKey(),
+  /** If true, only users with valid beta invites can sign up */
+  inviteOnly: int("inviteOnly").default(0).notNull(), // 0=false, 1=true
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type AppSettings = typeof appSettings.$inferSelect;
+export type InsertAppSettings = typeof appSettings.$inferInsert;

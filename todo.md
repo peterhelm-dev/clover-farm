@@ -95,3 +95,12 @@
 - [x] Add Beta Feedback tab to admin panel: list all feedback with user, rating, category, message
 - [x] Register /beta/:code route in App.tsx
 - [x] Write vitest tests for beta invite procedures (covered by existing admin/referral test patterns)
+
+## Polish & Launch Prep
+- [x] Add Admin nav link to sidebar (visible only when user.role === 'admin')
+- [x] Create Privacy Policy page (/privacy)
+- [x] Create Terms of Service page (/tos)
+- [x] Wire footer links to /privacy and /tos
+- [x] Wire notifyOwner() on beta feedback submission (server-side)
+- [x] Fix post-login beta invite redirect (encode returnPath in OAuth state, parse on callback)
+- [x] Add invite-only signup mode (appSettings table, admin toggle, enforce on OAuth callback)

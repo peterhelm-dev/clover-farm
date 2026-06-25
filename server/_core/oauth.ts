@@ -3,6 +3,9 @@ import type { Express, Request, Response } from "express";
 import * as db from "../db";
 import { getSessionCookieOptions } from "./cookies";
 import { sdk } from "./sdk";
+import { getDb } from "../db";
+import { appSettings, betaInvites, users } from "../../drizzle/schema";
+import { eq } from "drizzle-orm";
 
 function getQueryParam(req: Request, key: string): string | undefined {
   const value = req.query[key];
@@ -28,6 +31,37 @@ export function registerOAuthRoutes(app: Express) {
         return;
       }
 
+      // Check if this is a new user and if invite-only mode is enabled
+      const dbConn = await getDb();
+      if (dbConn) {
+        const [existingUser] = await dbConn
+          .select()
+          .from(users)
+          .where(eq(users.openId, userInfo.openId));
+
+        if (!existingUser) {
+          // New user — check invite-only mode
+          const [settings] = await dbConn.select().from(appSettings).limit(1);
+          if (settings?.inviteOnly === 1) {
+            // Invite-only mode is enabled — check for valid beta invite code in query params
+            const inviteCode = getQueryParam(req, "inviteCode");
+            if (inviteCode) {
+              const [invite] = await dbConn
+                .select()
+                .from(betaInvites)
+                .where(eq(betaInvites.code, inviteCode));
+              if (!invite || invite.redeemedBy || new Date(invite.expiresAt) < new Date()) {
+                res.status(403).json({ error: "Invalid or expired invite code" });
+                return;
+              }
+            } else {
+              res.status(403).json({ error: "This app is invite-only. You need a valid invite code to sign up." });
+              return;
+            }
+          }
+        }
+      }
+
       await db.upsertUser({
         openId: userInfo.openId,
         name: userInfo.name || null,
@@ -44,7 +78,18 @@ export function registerOAuthRoutes(app: Express) {
       const cookieOptions = getSessionCookieOptions(req);
       res.cookie(COOKIE_NAME, sessionToken, { ...cookieOptions, maxAge: ONE_YEAR_MS });
 
-      res.redirect(302, "/");
+      // Parse returnPath and inviteCode from state if provided
+      let returnPath = "/";
+      try {
+        const stateObj = JSON.parse(atob(state));
+        if (stateObj.returnPath && typeof stateObj.returnPath === "string") {
+          returnPath = stateObj.returnPath;
+        }
+      } catch {
+        // If state parsing fails, just use default "/"
+      }
+
+      res.redirect(302, returnPath);
     } catch (error) {
       console.error("[OAuth] Callback failed", error);
       res.status(500).json({ error: "OAuth callback failed" });
