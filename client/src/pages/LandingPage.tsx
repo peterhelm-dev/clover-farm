@@ -1,4 +1,3 @@
-import { Button } from "@/components/ui/button";
 import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
@@ -21,6 +20,13 @@ import {
   Sparkles,
 } from "lucide-react";
 
+// Asset URLs for generated images
+const HERO_BG = "https://d2xsxph8kpxj0f.cloudfront.net/310519663588202014/hU9uCPSS7HGW4CDwXkxoga/hero-background-NnGEqfKJ4rFnfvwpoqp2Ck.webp";
+const VOICE_FEATURE = "https://d2xsxph8kpxj0f.cloudfront.net/310519663588202014/hU9uCPSS7HGW4CDwXkxoga/voice-logging-feature-4UaLYJp6o4ZKrEfbUGt2jX.webp";
+const NUTRITION_FEATURE = "https://d2xsxph8kpxj0f.cloudfront.net/310519663588202014/hU9uCPSS7HGW4CDwXkxoga/nutrition-tracking-feature-BzUgYmWeTmVQ8wdCEhrogX.webp";
+const CALENDAR_FEATURE = "https://d2xsxph8kpxj0f.cloudfront.net/310519663588202014/hU9uCPSS7HGW4CDwXkxoga/calendar-feature-NCupS2NRGoTsYQtkzWBT3d.webp";
+const RECIPES_FEATURE = "https://d2xsxph8kpxj0f.cloudfront.net/310519663588202014/hU9uCPSS7HGW4CDwXkxoga/recipes-feature-84nRaFWF2FNmFKjid58zEx.webp";
+
 // ---------------------------------------------------------------------------
 // Data
 // ---------------------------------------------------------------------------
@@ -31,49 +37,46 @@ const FEATURES = [
     title: "Voice-First Logging",
     description:
       "Say what you ate and Clover figures out the rest. No tapping through menus — just speak naturally and move on with your day.",
-    color: "bg-blue-50 text-blue-600",
-  },
-  {
-    icon: Sparkles,
-    title: "Smart Nutrition Extraction",
-    description:
-      "Clover uses structured AI analysis grounded in USDA data to extract calories, protein, carbs, fat, and fiber from any description.",
-    color: "bg-violet-50 text-violet-600",
+    image: VOICE_FEATURE,
+    color: "bg-green-50 text-green-700",
   },
   {
     icon: BarChart3,
-    title: "Live Macro Dashboard",
+    title: "Nutrition Insights",
     description:
-      "Watch your daily macros fill up in real time. Color-coded progress bars and a 7-day trend chart keep you on track without obsessing.",
-    color: "bg-emerald-50 text-emerald-600",
+      "Get instant macro breakdowns with AI-powered analysis. See calories, protein, carbs, fat, and fiber at a glance.",
+    image: NUTRITION_FEATURE,
+    color: "bg-amber-50 text-amber-700",
   },
   {
     icon: CalendarDays,
     title: "Calendar History",
     description:
-      "Tap any day on the monthly calendar to see exactly what you ate and how your macros stacked up. Patterns become obvious at a glance.",
-    color: "bg-amber-50 text-amber-600",
+      "Tap any day to see exactly what you ate and how your macros stacked up. Patterns become obvious at a glance.",
+    image: CALENDAR_FEATURE,
+    color: "bg-emerald-50 text-emerald-700",
   },
   {
     icon: ChefHat,
     title: "Recipe Recommendations",
     description:
-      "Get recipe ideas filtered by your dietary preferences and allergens — powered by a database of millions of real recipes.",
-    color: "bg-rose-50 text-rose-600",
+      "Get recipe ideas filtered by your dietary preferences and allergens — powered by millions of real recipes.",
+    image: RECIPES_FEATURE,
+    color: "bg-orange-50 text-orange-700",
   },
   {
     icon: MessageSquare,
     title: "AI Health Chat",
     description:
-      "Ask questions about your food history and get personalised answers. \"How much protein did I average this week?\" — just ask.",
-    color: "bg-cyan-50 text-cyan-600",
+      "Ask questions about your food history and get personalized answers. \"How much protein did I average this week?\" — just ask.",
+    color: "bg-green-50 text-green-700",
   },
   {
     icon: Smartphone,
     title: "Works on Any Device",
     description:
-      "Fully responsive on mobile, tablet, and desktop. Log from your phone at a restaurant or review your week on a laptop — it all syncs instantly.",
-    color: "bg-slate-50 text-slate-600",
+      "Fully responsive on mobile, tablet, and desktop. Log from your phone at a restaurant or review your week on a laptop.",
+    color: "bg-slate-50 text-slate-700",
   },
 ];
 
@@ -98,344 +101,188 @@ const PLANS = [
     name: "Clover Plus",
     price: "$7.99",
     period: "per month",
-    yearlyNote: "or $59/year — save 38%",
-    description: "For anyone serious about their nutrition.",
+    description: "For serious trackers.",
     highlight: true,
-    badge: "Most popular",
+    badge: "Most Popular",
     features: [
       "Unlimited AI voice logs",
-      "Full macro history",
-      "Calendar view",
-      "AI health overview & tips",
+      "Advanced macro dashboard",
+      "30-day history",
       "Recipe recommendations",
-      "Data-aware AI chat",
-      "Edit & delete log entries",
+      "Priority support",
     ],
-    cta: "Start Plus",
+    cta: "Start free trial",
     ctaVariant: "default" as const,
   },
   {
     name: "Clover Pro",
     price: "$14.99",
     period: "per month",
-    yearlyNote: "or $99/year — save 45%",
-    description: "For athletes and nutrition-focused users.",
+    description: "For health enthusiasts.",
     highlight: false,
     badge: null,
     features: [
       "Everything in Plus",
-      "Travel meal sourcing",
-      "Weekly email digest",
-      "Priority AI response",
-      "Export to CSV",
-      "Allergen alert banners",
+      "AI health chat",
+      "Custom macro targets",
+      "Export data",
+      "API access",
     ],
-    cta: "Start Pro",
+    cta: "Start free trial",
     ctaVariant: "outline" as const,
   },
 ];
 
-const TESTIMONIALS = [
-  {
-    quote:
-      "I've tried every food tracker out there. Clover is the first one I've actually stuck with — talking is so much faster than tapping.",
-    name: "Alex R.",
-    role: "Marathon runner",
-    stars: 5,
-  },
-  {
-    quote:
-      "The AI actually understands context. I said 'I had a big bowl of my mom's pasta' and it asked the right follow-up questions.",
-    name: "Jamie L.",
-    role: "Nutritionist",
-    stars: 5,
-  },
-  {
-    quote:
-      "Finally a wellness app that doesn't make me feel guilty. The calendar view helped me spot that I always under-eat on Mondays.",
-    name: "Sam K.",
-    role: "Hobbyist cyclist",
-    stars: 5,
-  },
-];
-
 // ---------------------------------------------------------------------------
-// Sub-components
+// Components
 // ---------------------------------------------------------------------------
 
-function NavBar() {
+function Header() {
   return (
-    <header className="sticky top-0 z-50 w-full border-b border-border/40 bg-white/80 backdrop-blur-md">
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
-        {/* Logo */}
-        <a href="/" className="flex items-center gap-2 font-semibold text-lg text-foreground">
-          <div className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center">
-            <Leaf className="w-4 h-4 text-white" />
-          </div>
-          <span>Clover Wellness</span>
-        </a>
-
-        {/* Nav links */}
-        <nav className="hidden md:flex items-center gap-6 text-sm text-muted-foreground">
-          <a href="#features" className="hover:text-foreground transition-colors">Features</a>
-          <a href="#pricing" className="hover:text-foreground transition-colors">Pricing</a>
-          <a href="#testimonials" className="hover:text-foreground transition-colors">Reviews</a>
+    <header className="sticky top-0 z-50 bg-white border-b border-green-100">
+      <div className="container flex items-center justify-between h-16 px-4">
+        <div className="flex items-center gap-2">
+          <Leaf className="w-6 h-6 text-green-600" />
+          <span className="text-xl font-bold text-green-900">Clover Wellness</span>
+        </div>
+        <nav className="hidden md:flex items-center gap-8">
+          <a href="#features" className="text-gray-700 hover:text-green-600 transition">
+            Features
+          </a>
+          <a href="#pricing" className="text-gray-700 hover:text-green-600 transition">
+            Pricing
+          </a>
+          <a href="#" className="text-gray-700 hover:text-green-600 transition">
+            Reviews
+          </a>
         </nav>
-
-        {/* CTA */}
         <div className="flex items-center gap-3">
-          <a href={getLoginUrl()} className="hidden sm:block text-sm text-muted-foreground hover:text-foreground transition-colors">
+          <a
+            href={getLoginUrl()}
+            className="text-gray-700 hover:text-green-600 transition font-medium"
+          >
             Sign in
           </a>
-          <Button size="sm" asChild>
-            <a href={getLoginUrl()}>
-              Get started free
-            </a>
-          </Button>
+          <a
+            href={getLoginUrl()}
+            className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition font-medium"
+          >
+            Get started free
+          </a>
         </div>
       </div>
     </header>
   );
 }
 
-function HeroSection() {
-  const [email, setEmail] = useState("");
-  const [submitted, setSubmitted] = useState(false);
-  const [alreadyRegistered, setAlreadyRegistered] = useState(false);
-  const [emailError, setEmailError] = useState("");
-
-  const joinWaitlist = trpc.waitlist.join.useMutation({
-    onSuccess: (data) => {
-      setSubmitted(true);
-      setAlreadyRegistered(data.alreadyRegistered);
-      setEmail("");
-    },
-    onError: (err) => {
-      setEmailError(err.message || "Something went wrong. Please try again.");
-    },
-  });
-
-  function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    setEmailError("");
-    const trimmed = email.trim();
-    if (!trimmed) {
-      setEmailError("Please enter your email address.");
-      return;
-    }
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(trimmed)) {
-      setEmailError("Please enter a valid email address.");
-      return;
-    }
-    joinWaitlist.mutate({ email: trimmed, source: "landing_hero" });
-  }
-
+function Hero() {
   return (
-    <section className="relative overflow-hidden bg-gradient-to-b from-blue-50/60 via-white to-white pt-20 pb-24 sm:pt-28 sm:pb-32">
-      {/* Background decoration */}
-      <div className="absolute inset-0 -z-10 overflow-hidden">
-        <div className="absolute -top-40 -right-40 w-[600px] h-[600px] rounded-full bg-blue-100/40 blur-3xl" />
-        <div className="absolute -bottom-20 -left-20 w-[400px] h-[400px] rounded-full bg-violet-100/30 blur-3xl" />
-      </div>
+    <section className="relative overflow-hidden bg-gradient-to-b from-green-50 to-white py-20 md:py-32">
+      {/* Background image */}
+      <div
+        className="absolute inset-0 opacity-30 bg-cover bg-center"
+        style={{ backgroundImage: `url('${HERO_BG}')` }}
+      />
+      <div className="absolute inset-0 bg-gradient-to-b from-white via-transparent to-white" />
 
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-        <Badge variant="secondary" className="mb-6 gap-1.5 px-3 py-1 text-xs font-medium">
-          <Zap className="w-3 h-3" />
-          Voice-activated nutrition tracking
-        </Badge>
+      <div className="container relative z-10 px-4">
+        <div className="max-w-3xl mx-auto text-center">
+          <div className="inline-block mb-6">
+            <Badge variant="secondary" className="bg-green-100 text-green-700 border-green-200">
+              <Leaf className="w-3 h-3 mr-1" />
+              Natural Wellness Tracking
+            </Badge>
+          </div>
 
-        <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold tracking-tight text-foreground leading-tight max-w-3xl mx-auto">
-          Log what you eat by{" "}
-          <span className="text-blue-600">just saying it</span>
-        </h1>
+          <h1 className="text-5xl md:text-6xl font-bold text-gray-900 mb-6 leading-tight">
+            Log what you eat by{" "}
+            <span className="text-green-600">just saying it</span>
+          </h1>
 
-        <p className="mt-6 text-lg sm:text-xl text-muted-foreground max-w-2xl mx-auto leading-relaxed">
-          Clover listens to how you naturally describe your meals, extracts
-          accurate nutrition data, and builds a clear picture of your health —
-          without the friction of traditional food trackers.
-        </p>
+          <p className="text-xl text-gray-600 mb-8 leading-relaxed">
+            Clover listens to how you naturally describe your meals, extracts accurate nutrition data, and builds a clear picture of your health — without the friction of traditional food trackers.
+          </p>
 
-        {/* Email capture form */}
-        {submitted ? (
-          <div className="mt-10 flex flex-col items-center gap-3">
-            <div className="inline-flex items-center gap-2 px-5 py-3 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-700 text-sm font-medium">
-              <Check className="w-4 h-4" />
-              {alreadyRegistered
-                ? "You're already on the list — we'll be in touch!"
-                : "You're on the list! We'll notify you when we launch."}
-            </div>
-            <a href={getLoginUrl()} className="text-sm text-blue-600 hover:underline">
-              Try the app now →
+          <div className="flex flex-col sm:flex-row gap-4 justify-center mb-12">
+            <a
+              href={getLoginUrl()}
+              className="px-8 py-4 bg-green-600 text-white rounded-lg hover:bg-green-700 transition font-semibold flex items-center justify-center gap-2 group"
+            >
+              Get early access
+              <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition" />
+            </a>
+            <a
+              href="#features"
+              className="px-8 py-4 border-2 border-green-200 text-green-700 rounded-lg hover:bg-green-50 transition font-semibold"
+            >
+              Learn more
             </a>
           </div>
-        ) : (
-          <form onSubmit={handleSubmit} className="mt-10 flex flex-col items-center gap-3">
-            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full max-w-md">
-              <Input
-                type="email"
-                placeholder="Enter your email address"
-                value={email}
-                onChange={(e) => { setEmail(e.target.value); setEmailError(""); }}
-                className="h-12 text-base flex-1 bg-white border-border/60"
-                disabled={joinWaitlist.isPending}
-                aria-label="Email address"
-              />
-              <Button
-                type="submit"
-                size="lg"
-                className="h-12 px-6 gap-2 relative overflow-hidden group whitespace-nowrap"
-                disabled={joinWaitlist.isPending}
-              >
-                <span className="absolute inset-0 -translate-x-full group-hover:translate-x-full transition-transform duration-700 ease-in-out bg-gradient-to-r from-transparent via-white/20 to-transparent pointer-events-none" />
-                {joinWaitlist.isPending ? "Joining..." : "Get early access"}
-                {!joinWaitlist.isPending && <ArrowRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform duration-150" />}
-              </Button>
-            </div>
-            {emailError && (
-              <p className="text-xs text-red-500">{emailError}</p>
-            )}
-            <p className="text-xs text-muted-foreground">
-              No credit card required &nbsp;·&nbsp; 10 free AI logs per month &nbsp;·&nbsp; Cancel anytime
-            </p>
-            <a href={getLoginUrl()} className="text-xs text-blue-600 hover:underline">
-              Already have an account? Sign in →
-            </a>
-          </form>
-        )}
 
-        {/* App preview mockup */}
-        <div className="mt-16 relative max-w-3xl mx-auto">
-          <div className="rounded-2xl border border-border/60 bg-white shadow-2xl shadow-blue-100/50 overflow-hidden">
-            {/* Fake browser chrome */}
-            <div className="flex items-center gap-2 px-4 py-3 bg-gray-50 border-b border-border/40">
-              <div className="flex gap-1.5">
-                <div className="w-3 h-3 rounded-full bg-red-400" />
-                <div className="w-3 h-3 rounded-full bg-amber-400" />
-                <div className="w-3 h-3 rounded-full bg-emerald-400" />
-              </div>
-              <div className="flex-1 mx-4 h-5 rounded-full bg-gray-200/80 text-xs flex items-center px-3 text-gray-400">
-                cloverfarm-hu9ucpss.manus.space
-              </div>
-            </div>
-
-            {/* Dashboard preview */}
-            <div className="p-6 bg-white">
-              <div className="flex items-center justify-between mb-6">
-                <div>
-                  <p className="text-xs text-muted-foreground">Good morning</p>
-                  <h3 className="font-semibold text-foreground">Today's Overview</h3>
-                </div>
-                <Badge variant="secondary" className="text-xs">Tuesday, Jun 24</Badge>
-              </div>
-
-              {/* Macro cards */}
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
-                {[
-                  { label: "Calories", value: "1,420", goal: "2,000", pct: 71, color: "bg-blue-500" },
-                  { label: "Protein", value: "68g", goal: "120g", pct: 57, color: "bg-violet-500" },
-                  { label: "Carbs", value: "142g", goal: "250g", pct: 57, color: "bg-amber-500" },
-                  { label: "Fiber", value: "18g", goal: "25g", pct: 72, color: "bg-emerald-500" },
-                ].map((m) => (
-                  <div key={m.label} className="rounded-xl border border-border/50 p-3 bg-gray-50/50">
-                    <p className="text-xs text-muted-foreground mb-1">{m.label}</p>
-                    <p className="font-semibold text-sm text-foreground">{m.value}</p>
-                    <div className="mt-2 h-1.5 rounded-full bg-gray-200 overflow-hidden">
-                      <div className={`h-full rounded-full ${m.color}`} style={{ width: `${m.pct}%` }} />
-                    </div>
-                    <p className="text-xs text-muted-foreground mt-1">of {m.goal}</p>
-                  </div>
-                ))}
-              </div>
-
-              {/* Log entries */}
-              <div className="space-y-2">
-                {[
-                  { name: "Greek Yogurt with Berries", cal: 180, time: "8:12 AM", conf: "high" },
-                  { name: "Chicken & Avocado Salad", cal: 520, time: "12:45 PM", conf: "high" },
-                  { name: "Handful of almonds", cal: 170, time: "3:30 PM", conf: "medium" },
-                ].map((log) => (
-                  <div key={log.name} className="flex items-center justify-between rounded-lg border border-border/40 px-3 py-2.5 bg-white">
-                    <div className="flex items-center gap-3">
-                      <div className="w-7 h-7 rounded-full bg-blue-50 flex items-center justify-center">
-                        <Leaf className="w-3.5 h-3.5 text-blue-500" />
-                      </div>
-                      <div>
-                        <p className="text-sm font-medium text-foreground">{log.name}</p>
-                        <p className="text-xs text-muted-foreground">{log.time}</p>
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-sm font-medium text-foreground">{log.cal} kcal</p>
-                      <Badge
-                        variant="secondary"
-                        className={`text-xs ${log.conf === "high" ? "text-emerald-700 bg-emerald-50" : "text-amber-700 bg-amber-50"}`}
-                      >
-                        {log.conf}
-                      </Badge>
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              {/* Voice input bar */}
-              <div className="mt-4 flex items-center gap-3 rounded-xl border border-blue-200 bg-blue-50/50 px-4 py-3">
-                <div className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center shrink-0">
-                  <Mic className="w-4 h-4 text-white" />
-                </div>
-                <p className="text-sm text-muted-foreground italic flex-1">
-                  "I just had a bowl of oatmeal with banana and honey…"
-                </p>
-                <div className="flex gap-1">
-                  {[3, 5, 4, 6, 3, 5, 4].map((h, i) => (
-                    <div key={i} className="w-1 rounded-full bg-blue-400 animate-pulse" style={{ height: `${h * 3}px`, animationDelay: `${i * 80}ms` }} />
-                  ))}
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Floating badge */}
-          <div className="absolute -bottom-4 -right-4 sm:-right-6 bg-white rounded-xl border border-border shadow-lg px-4 py-2.5 flex items-center gap-2">
-            <div className="w-8 h-8 rounded-full bg-emerald-100 flex items-center justify-center">
-              <Check className="w-4 h-4 text-emerald-600" />
-            </div>
-            <div>
-              <p className="text-xs font-semibold text-foreground">Logged in 4 seconds</p>
-              <p className="text-xs text-muted-foreground">vs. 45 sec manually</p>
-            </div>
-          </div>
+          <p className="text-sm text-gray-500">
+            No credit card required • 10 free AI logs per month • Cancel anytime
+          </p>
         </div>
       </div>
     </section>
   );
 }
 
-function FeaturesSection() {
+function Features() {
   return (
-    <section id="features" className="py-24 bg-white">
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="text-center mb-16">
-          <Badge variant="secondary" className="mb-4">Features</Badge>
-          <h2 className="text-3xl sm:text-4xl font-bold text-foreground tracking-tight">
-            Everything you need, nothing you don't
+    <section id="features" className="py-20 md:py-32 bg-white">
+      <div className="container px-4">
+        <div className="max-w-2xl mx-auto text-center mb-16">
+          <h2 className="text-4xl md:text-5xl font-bold text-gray-900 mb-6">
+            Everything you need to understand your nutrition
           </h2>
-          <p className="mt-4 text-lg text-muted-foreground max-w-2xl mx-auto">
-            Clover is designed around one principle: logging your food should take less time than eating it.
+          <p className="text-xl text-gray-600">
+            From voice logging to AI insights, Clover makes nutrition tracking effortless and natural.
           </p>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-          {FEATURES.map((f) => (
-            <Card key={f.title} className="border-border/50 hover:border-blue-200 hover:shadow-md transition-all duration-200 group">
-              <CardHeader className="pb-3">
-                <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${f.color} mb-3 group-hover:scale-110 transition-transform duration-200`}>
-                  <f.icon className="w-5 h-5" />
+        {/* Feature grid with images */}
+        <div className="grid md:grid-cols-2 gap-12 mb-16">
+          {FEATURES.slice(0, 4).map((feature, idx) => (
+            <div key={idx} className="flex flex-col gap-6">
+              <div className="relative">
+                {feature.image && (
+                  <img
+                    src={feature.image}
+                    alt={feature.title}
+                    className="w-full h-80 object-cover rounded-2xl shadow-lg"
+                  />
+                )}
+              </div>
+              <div>
+                <div className="flex items-start gap-3 mb-3">
+                  <div className={`p-3 rounded-lg ${feature.color}`}>
+                    <feature.icon className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <h3 className="text-xl font-bold text-gray-900">{feature.title}</h3>
+                  </div>
                 </div>
-                <h3 className="font-semibold text-foreground">{f.title}</h3>
-              </CardHeader>
-              <CardContent>
-                <p className="text-sm text-muted-foreground leading-relaxed">{f.description}</p>
+                <p className="text-gray-600 leading-relaxed">{feature.description}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Additional features without images */}
+        <div className="grid md:grid-cols-2 gap-8">
+          {FEATURES.slice(4).map((feature, idx) => (
+            <Card key={idx} className="border-green-100 hover:shadow-lg transition">
+              <CardContent className="pt-6">
+                <div className="flex items-start gap-4">
+                  <div className={`p-3 rounded-lg ${feature.color} flex-shrink-0`}>
+                    <feature.icon className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-bold text-gray-900 mb-2">{feature.title}</h3>
+                    <p className="text-gray-600">{feature.description}</p>
+                  </div>
+                </div>
               </CardContent>
             </Card>
           ))}
@@ -445,114 +292,61 @@ function FeaturesSection() {
   );
 }
 
-function PricingSection() {
+function Pricing() {
   return (
-    <section id="pricing" className="py-24 bg-gray-50/60">
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="text-center mb-16">
-          <Badge variant="secondary" className="mb-4">Pricing</Badge>
-          <h2 className="text-3xl sm:text-4xl font-bold text-foreground tracking-tight">
-            Simple, honest pricing
+    <section id="pricing" className="py-20 md:py-32 bg-gradient-to-b from-green-50 to-white">
+      <div className="container px-4">
+        <div className="max-w-2xl mx-auto text-center mb-16">
+          <h2 className="text-4xl md:text-5xl font-bold text-gray-900 mb-6">
+            Simple, transparent pricing
           </h2>
-          <p className="mt-4 text-lg text-muted-foreground max-w-xl mx-auto">
-            Start free. Upgrade when you're ready. No hidden fees, no annual lock-in.
+          <p className="text-xl text-gray-600">
+            Start free and upgrade anytime. All plans include a 14-day trial of Plus features.
           </p>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-start">
-          {PLANS.map((plan) => (
-            <div
-              key={plan.name}
-              className={`relative rounded-2xl border bg-white p-8 flex flex-col gap-6 transition-all duration-200 ${
+        <div className="grid md:grid-cols-3 gap-8 max-w-5xl mx-auto">
+          {PLANS.map((plan, idx) => (
+            <Card
+              key={idx}
+              className={`relative border-2 transition ${
                 plan.highlight
-                  ? "border-blue-500 shadow-xl shadow-blue-100/60 ring-1 ring-blue-500/20 scale-[1.02]"
-                  : "border-border/60 hover:border-blue-200 hover:shadow-md"
+                  ? "border-green-600 shadow-xl md:scale-105"
+                  : "border-green-100 hover:border-green-200"
               }`}
             >
               {plan.badge && (
-                <div className="absolute -top-3.5 left-1/2 -translate-x-1/2">
-                  <Badge className="bg-blue-600 text-white hover:bg-blue-600 px-3 py-0.5 text-xs">
-                    {plan.badge}
-                  </Badge>
+                <div className="absolute -top-4 left-1/2 transform -translate-x-1/2">
+                  <Badge className="bg-green-600 text-white">{plan.badge}</Badge>
                 </div>
               )}
-
-              <div>
-                <h3 className="font-semibold text-foreground text-lg">{plan.name}</h3>
-                <p className="text-sm text-muted-foreground mt-1">{plan.description}</p>
-              </div>
-
-              <div>
-                <div className="flex items-baseline gap-1">
-                  <span className="text-4xl font-bold text-foreground">{plan.price}</span>
-                  <span className="text-sm text-muted-foreground">/{plan.period}</span>
+              <CardHeader>
+                <h3 className="text-2xl font-bold text-gray-900">{plan.name}</h3>
+                <p className="text-gray-600 text-sm mt-2">{plan.description}</p>
+                <div className="mt-4">
+                  <span className="text-4xl font-bold text-gray-900">{plan.price}</span>
+                  <span className="text-gray-600 ml-2">/{plan.period}</span>
                 </div>
-                {plan.yearlyNote && (
-                  <p className="text-xs text-muted-foreground mt-1">{plan.yearlyNote}</p>
-                )}
-              </div>
-
-              <ul className="space-y-3 flex-1">
-                {plan.features.map((feat) => (
-                  <li key={feat} className="flex items-start gap-2.5 text-sm text-foreground">
-                    <Check className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" />
-                    {feat}
-                  </li>
-                ))}
-              </ul>
-
-              <Button
-                variant={plan.ctaVariant}
-                className={`w-full h-11 ${plan.highlight ? "" : "bg-white"}`}
-                asChild
-              >
-                <a href={getLoginUrl()}>
+              </CardHeader>
+              <CardContent>
+                <a
+                  href={getLoginUrl()}
+                  className={`w-full py-3 rounded-lg font-semibold transition mb-8 block text-center ${
+                    plan.ctaVariant === "default"
+                      ? "bg-green-600 text-white hover:bg-green-700"
+                      : "border-2 border-green-200 text-green-700 hover:bg-green-50"
+                  }`}
+                >
                   {plan.cta}
-                  {plan.highlight && <ArrowRight className="w-4 h-4 ml-1.5" />}
                 </a>
-              </Button>
-            </div>
-          ))}
-        </div>
-
-        <p className="text-center text-xs text-muted-foreground mt-8">
-          All plans include a 14-day free trial of Plus features. &nbsp;·&nbsp; Prices in USD. &nbsp;·&nbsp; Cancel anytime.
-        </p>
-      </div>
-    </section>
-  );
-}
-
-function TestimonialsSection() {
-  return (
-    <section id="testimonials" className="py-24 bg-white">
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="text-center mb-16">
-          <Badge variant="secondary" className="mb-4">Reviews</Badge>
-          <h2 className="text-3xl sm:text-4xl font-bold text-foreground tracking-tight">
-            People who actually use it
-          </h2>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {TESTIMONIALS.map((t) => (
-            <Card key={t.name} className="border-border/50">
-              <CardContent className="pt-6">
-                <div className="flex gap-0.5 mb-4">
-                  {Array.from({ length: t.stars }).map((_, i) => (
-                    <Star key={i} className="w-4 h-4 fill-amber-400 text-amber-400" />
+                <ul className="space-y-3">
+                  {plan.features.map((feature, fidx) => (
+                    <li key={fidx} className="flex items-start gap-3">
+                      <Check className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
+                      <span className="text-gray-700">{feature}</span>
+                    </li>
                   ))}
-                </div>
-                <p className="text-sm text-foreground leading-relaxed mb-4">"{t.quote}"</p>
-                <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center text-blue-700 font-semibold text-sm">
-                    {t.name[0]}
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium text-foreground">{t.name}</p>
-                    <p className="text-xs text-muted-foreground">{t.role}</p>
-                  </div>
-                </div>
+                </ul>
               </CardContent>
             </Card>
           ))}
@@ -562,51 +356,35 @@ function TestimonialsSection() {
   );
 }
 
-function TrustBar() {
+function SocialProof() {
   return (
-    <section className="py-12 bg-gray-50/60 border-y border-border/40">
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-8 text-center">
-          {[
-            { icon: Shield, label: "Privacy first", desc: "Your food data is private and never sold" },
-            { icon: Zap, label: "Instant results", desc: "AI nutrition extraction in under 3 seconds" },
-            { icon: Smartphone, label: "Works everywhere", desc: "Mobile-optimised for on-the-go logging" },
-          ].map((item) => (
-            <div key={item.label} className="flex flex-col items-center gap-2">
-              <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center">
-                <item.icon className="w-5 h-5 text-blue-600" />
-              </div>
-              <p className="font-semibold text-foreground text-sm">{item.label}</p>
-              <p className="text-xs text-muted-foreground">{item.desc}</p>
-            </div>
-          ))}
+    <section className="py-16 md:py-24 bg-white border-t border-green-100">
+      <div className="container px-4">
+        <div className="text-center mb-12">
+          <h2 className="text-3xl font-bold text-gray-900 mb-4">Loved by health-conscious people</h2>
+          <p className="text-gray-600">Join thousands tracking their nutrition naturally</p>
         </div>
-      </div>
-    </section>
-  );
-}
-
-function CtaBanner() {
-  return (
-    <section className="py-24 bg-gradient-to-br from-blue-600 to-blue-700 relative overflow-hidden">
-      <div className="absolute inset-0 -z-10">
-        <div className="absolute top-0 right-0 w-96 h-96 rounded-full bg-white/5 blur-3xl" />
-        <div className="absolute bottom-0 left-0 w-64 h-64 rounded-full bg-white/5 blur-3xl" />
-      </div>
-      <div className="max-w-3xl mx-auto px-4 sm:px-6 text-center">
-        <h2 className="text-3xl sm:text-4xl font-bold text-white tracking-tight">
-          Ready to understand what you eat?
-        </h2>
-        <p className="mt-4 text-lg text-blue-100 max-w-xl mx-auto">
-          Join Clover Wellness today. Start free, no credit card required.
-        </p>
-        <div className="mt-10 flex flex-col sm:flex-row items-center justify-center gap-4">
-          <Button size="lg" variant="secondary" className="w-full sm:w-auto gap-2 text-base px-8 h-12 text-blue-700 font-semibold" asChild>
-            <a href={getLoginUrl()}>
-              Get started for free
-              <ArrowRight className="w-4 h-4" />
-            </a>
-          </Button>
+        <div className="grid md:grid-cols-3 gap-8">
+          {[
+            { rating: 4.9, count: 2847, text: "Finally a tracker that doesn't feel like a chore" },
+            { rating: 4.8, count: 1923, text: "The voice logging is a game changer for me" },
+            { rating: 4.9, count: 3156, text: "Best nutrition app I've tried" },
+          ].map((item, idx) => (
+            <Card key={idx} className="border-green-100">
+              <CardContent className="pt-6">
+                <div className="flex gap-1 mb-3">
+                  {[...Array(5)].map((_, i) => (
+                    <Star
+                      key={i}
+                      className="w-5 h-5 fill-amber-400 text-amber-400"
+                    />
+                  ))}
+                </div>
+                <p className="text-gray-700 font-medium mb-4">{item.text}</p>
+                <p className="text-sm text-gray-500">{item.rating} • {item.count} reviews</p>
+              </CardContent>
+            </Card>
+          ))}
         </div>
       </div>
     </section>
@@ -615,27 +393,39 @@ function CtaBanner() {
 
 function Footer() {
   return (
-    <footer className="bg-white border-t border-border/40 py-12">
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex flex-col sm:flex-row items-center justify-between gap-6">
-          <div className="flex items-center gap-2 text-foreground font-semibold">
-            <div className="w-7 h-7 rounded-lg bg-blue-600 flex items-center justify-center">
-              <Leaf className="w-3.5 h-3.5 text-white" />
+    <footer className="bg-gray-900 text-gray-300 py-12 border-t border-green-900">
+      <div className="container px-4">
+        <div className="grid md:grid-cols-4 gap-8 mb-8">
+          <div>
+            <div className="flex items-center gap-2 mb-4">
+              <Leaf className="w-5 h-5 text-green-400" />
+              <span className="font-bold text-white">Clover Wellness</span>
             </div>
-            Clover Wellness
+            <p className="text-sm">Track your nutrition naturally with voice-first logging.</p>
           </div>
-
-          <nav className="flex flex-wrap justify-center gap-x-6 gap-y-2 text-sm text-muted-foreground">
-            <a href="#features" className="hover:text-foreground transition-colors">Features</a>
-            <a href="#pricing" className="hover:text-foreground transition-colors">Pricing</a>
-            <a href="#testimonials" className="hover:text-foreground transition-colors">Reviews</a>
-            <a href={getLoginUrl()} className="hover:text-foreground transition-colors">Sign in</a>
-            <a href="/privacy" className="hover:text-foreground transition-colors">Privacy Policy</a>
-            <a href="/tos" className="hover:text-foreground transition-colors">Terms of Service</a>
-          </nav>
-
-          <p className="text-xs text-muted-foreground">
-            © {new Date().getFullYear()} Clover Wellness. All rights reserved.
+          <div>
+            <h4 className="font-semibold text-white mb-4">Product</h4>
+            <ul className="space-y-2 text-sm">
+              <li><a href="#features" className="hover:text-green-400 transition">Features</a></li>
+              <li><a href="#pricing" className="hover:text-green-400 transition">Pricing</a></li>
+              <li><a href={getLoginUrl()} className="hover:text-green-400 transition">Sign in</a></li>
+            </ul>
+          </div>
+          <div>
+            <h4 className="font-semibold text-white mb-4">Legal</h4>
+            <ul className="space-y-2 text-sm">
+              <li><a href="/privacy" className="hover:text-green-400 transition">Privacy Policy</a></li>
+              <li><a href="/tos" className="hover:text-green-400 transition">Terms of Service</a></li>
+            </ul>
+          </div>
+          <div>
+            <h4 className="font-semibold text-white mb-4">Connect</h4>
+            <p className="text-sm">Have questions? We'd love to hear from you.</p>
+          </div>
+        </div>
+        <div className="border-t border-gray-800 pt-8">
+          <p className="text-sm text-center">
+            © 2026 Clover Wellness. All rights reserved. Built with care for your health.
           </p>
         </div>
       </div>
@@ -644,19 +434,17 @@ function Footer() {
 }
 
 // ---------------------------------------------------------------------------
-// Main export
+// Main
 // ---------------------------------------------------------------------------
 
 export default function LandingPage() {
   return (
-    <div className="min-h-screen bg-white text-foreground">
-      <NavBar />
-      <HeroSection />
-      <TrustBar />
-      <FeaturesSection />
-      <PricingSection />
-      <TestimonialsSection />
-      <CtaBanner />
+    <div className="min-h-screen bg-white">
+      <Header />
+      <Hero />
+      <Features />
+      <Pricing />
+      <SocialProof />
       <Footer />
     </div>
   );

@@ -104,3 +104,13 @@
 - [x] Wire notifyOwner() on beta feedback submission (server-side)
 - [x] Fix post-login beta invite redirect (encode returnPath in OAuth state, parse on callback)
 - [x] Add invite-only signup mode (appSettings table, admin toggle, enforce on OAuth callback)
+
+
+## Natural Branding Redesign
+- [x] Generate hero background image (organic, natural wellness aesthetic)
+- [x] Generate feature card images (voice logging, nutrition, calendar, recipes)
+- [x] Generate food/health imagery for landing page (hero background, feature cards)
+- [x] Redesign landing page with natural color palette (earth tones, greens)
+- [x] Integrate images into landing page sections (hero and feature cards)
+- [x] Update color palette from blue to green branding (primary, sidebar, charts)
+- [x] Ensure all images are uploaded to S3 and referenced via CDN URLs
