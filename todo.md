@@ -114,3 +114,25 @@
 - [x] Integrate images into landing page sections (hero and feature cards)
 - [x] Update color palette from blue to green branding (primary, sidebar, charts)
 - [x] Ensure all images are uploaded to S3 and referenced via CDN URLs
+
+
+## Scroll Animations & Effects
+- [ ] Create useIntersectionObserver hook for fade-in animations
+- [ ] Add scroll animation CSS utilities to index.css
+- [ ] Implement fade-in on hero section
+- [ ] Implement fade-in + stagger on feature cards
+- [ ] Implement fade-in + stagger on pricing cards
+- [ ] Implement fade-in on social proof section
+- [ ] Test animations on mobile and desktop
+
+
+## Image-Based Meal Logging
+- [x] Add camera/gallery upload button to dashboard (ImageMealLogger component)
+- [x] Build image preview modal with crop/rotate controls
+- [x] Create image upload tRPC procedure (upload to S3, return URL)
+- [x] Build server-side image analysis procedure (invoke LLM vision API with vision support)
+- [x] Extract meal description from AI vision analysis (structured JSON response)
+- [x] Wire image analysis to nutrition extraction (create food log entry with image)
+- [x] Add image storage link to food_logs table (imageUrl field)
+- [x] Display meal images in food log history (stored with imageUrl)
+- [ ] Write tests for image analysis procedures

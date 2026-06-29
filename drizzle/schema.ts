@@ -60,6 +60,7 @@ export const foodLogs = mysqlTable("foodLogs", {
   id: bigint("id", { mode: "number" }).autoincrement().primaryKey(),
   userId: int("userId").notNull(),
   rawSpeech: text("rawSpeech"),
+  imageUrl: text("imageUrl"), // S3 URL if logged from image
   foodName: varchar("foodName", { length: 255 }).notNull(),
   quantity: varchar("quantity", { length: 255 }),
   calories: decimal("calories", { precision: 8, scale: 2 }).default("0"),

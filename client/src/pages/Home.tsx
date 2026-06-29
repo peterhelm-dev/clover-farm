@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { AIChatBox } from "@/components/AIChatBox";
+import { ImageMealLogger } from "@/components/ImageMealLogger";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { trpc } from "@/lib/trpc";
 import { getLoginUrl } from "@/const";
@@ -1108,9 +1109,12 @@ export default function Home() {
                 <h2 className="text-2xl sm:text-3xl font-serif font-bold tracking-tight">Your Health Habits</h2>
                 <p className="text-xs text-muted-foreground mt-1">Real-time daily tracking powered by AI voice-logging.</p>
               </div>
-              <Button onClick={() => setActiveTab("voice-logger")} className="gap-1.5 text-xs">
-                <Mic className="h-3.5 w-3.5" /> Log Food
-              </Button>
+              <div className="flex gap-2">
+                <ImageMealLogger onSuccess={() => todayLogsQuery.refetch()} />
+                <Button onClick={() => setActiveTab("voice-logger")} className="gap-1.5 text-xs">
+                  <Mic className="h-3.5 w-3.5" /> Log Food
+                </Button>
+              </div>
             </div>
 
             {/* Macro progress cards — 5 cards including fiber */}
