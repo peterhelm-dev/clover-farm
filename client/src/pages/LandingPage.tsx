@@ -19,6 +19,7 @@ import {
   ArrowRight,
   Sparkles,
 } from "lucide-react";
+import { useIntersectionObserver } from "@/hooks/useIntersectionObserver";
 
 // Asset URLs for generated images
 const HERO_BG = "https://d2xsxph8kpxj0f.cloudfront.net/310519663588202014/hU9uCPSS7HGW4CDwXkxoga/hero-background-NnGEqfKJ4rFnfvwpoqp2Ck.webp";
@@ -176,8 +177,9 @@ function Header() {
 }
 
 function Hero() {
+  const { ref, isVisible } = useIntersectionObserver({ threshold: 0.3 });
   return (
-    <section className="relative overflow-hidden bg-gradient-to-b from-green-50 to-white py-20 md:py-32">
+    <section ref={ref} className="relative overflow-hidden bg-gradient-to-b from-green-50 to-white py-20 md:py-32">
       {/* Background image */}
       <div
         className="absolute inset-0 opacity-30 bg-cover bg-center"
@@ -185,7 +187,7 @@ function Hero() {
       />
       <div className="absolute inset-0 bg-gradient-to-b from-white via-transparent to-white" />
 
-      <div className="container relative z-10 px-4">
+      <div className={`container relative z-10 px-4 transition-all duration-1000 ${isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'}`}>
         <div className="max-w-3xl mx-auto text-center">
           <div className="inline-block mb-6">
             <Badge variant="secondary" className="bg-green-100 text-green-700 border-green-200">
@@ -243,8 +245,10 @@ function Features() {
 
         {/* Feature grid with images */}
         <div className="grid md:grid-cols-2 gap-12 mb-16">
-          {FEATURES.slice(0, 4).map((feature, idx) => (
-            <div key={idx} className="flex flex-col gap-6">
+          {FEATURES.slice(0, 4).map((feature, idx) => {
+            const { ref, isVisible } = useIntersectionObserver({ threshold: 0.2 });
+            return (
+            <div key={idx} ref={ref} className={`flex flex-col gap-6 transition-all duration-1000 ${isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'}`} style={{ transitionDelay: `${idx * 150}ms` }}>
               <div className="relative">
                 {feature.image && (
                   <img
@@ -266,7 +270,8 @@ function Features() {
                 <p className="text-gray-600 leading-relaxed">{feature.description}</p>
               </div>
             </div>
-          ))}
+            );
+          })}
         </div>
 
         {/* Additional features without images */}
@@ -293,10 +298,11 @@ function Features() {
 }
 
 function Pricing() {
+  const { ref, isVisible } = useIntersectionObserver({ threshold: 0.2 });
   return (
-    <section id="pricing" className="py-20 md:py-32 bg-gradient-to-b from-green-50 to-white">
+    <section ref={ref} id="pricing" className="py-20 md:py-32 bg-gradient-to-b from-green-50 to-white">
       <div className="container px-4">
-        <div className="max-w-2xl mx-auto text-center mb-16">
+        <div className={`max-w-2xl mx-auto text-center mb-16 transition-all duration-1000 ${isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'}`}>
           <h2 className="text-4xl md:text-5xl font-bold text-gray-900 mb-6">
             Simple, transparent pricing
           </h2>
@@ -306,14 +312,18 @@ function Pricing() {
         </div>
 
         <div className="grid md:grid-cols-3 gap-8 max-w-5xl mx-auto">
-          {PLANS.map((plan, idx) => (
+          {PLANS.map((plan, idx) => {
+            const { ref, isVisible } = useIntersectionObserver({ threshold: 0.2 });
+            return (
             <Card
+              ref={ref}
               key={idx}
-              className={`relative border-2 transition ${
+              className={`relative border-2 transition ${isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'} ${
                 plan.highlight
                   ? "border-green-600 shadow-xl md:scale-105"
                   : "border-green-100 hover:border-green-200"
               }`}
+              style={{ transitionDelay: `${idx * 150}ms` }}
             >
               {plan.badge && (
                 <div className="absolute -top-4 left-1/2 transform -translate-x-1/2">
@@ -349,7 +359,8 @@ function Pricing() {
                 </ul>
               </CardContent>
             </Card>
-          ))}
+            );
+          })}
         </div>
       </div>
     </section>
@@ -357,10 +368,11 @@ function Pricing() {
 }
 
 function SocialProof() {
+  const { ref, isVisible } = useIntersectionObserver({ threshold: 0.2 });
   return (
-    <section className="py-16 md:py-24 bg-white border-t border-green-100">
+    <section ref={ref} className="py-16 md:py-24 bg-white border-t border-green-100">
       <div className="container px-4">
-        <div className="text-center mb-12">
+        <div className={`text-center mb-12 transition-all duration-1000 ${isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'}`}>
           <h2 className="text-3xl font-bold text-gray-900 mb-4">Loved by health-conscious people</h2>
           <p className="text-gray-600">Join thousands tracking their nutrition naturally</p>
         </div>
@@ -369,8 +381,10 @@ function SocialProof() {
             { rating: 4.9, count: 2847, text: "Finally a tracker that doesn't feel like a chore" },
             { rating: 4.8, count: 1923, text: "The voice logging is a game changer for me" },
             { rating: 4.9, count: 3156, text: "Best nutrition app I've tried" },
-          ].map((item, idx) => (
-            <Card key={idx} className="border-green-100">
+          ].map((item, idx) => {
+            const { ref, isVisible } = useIntersectionObserver({ threshold: 0.2 });
+            return (
+            <Card ref={ref} key={idx} className={`border-green-100 transition-all duration-1000 ${isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'}`} style={{ transitionDelay: `${idx * 150}ms` }}>
               <CardContent className="pt-6">
                 <div className="flex gap-1 mb-3">
                   {[...Array(5)].map((_, i) => (
@@ -384,7 +398,8 @@ function SocialProof() {
                 <p className="text-sm text-gray-500">{item.rating} • {item.count} reviews</p>
               </CardContent>
             </Card>
-          ))}
+            );
+          })}
         </div>
       </div>
     </section>

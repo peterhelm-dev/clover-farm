@@ -116,13 +116,13 @@
 - [x] Ensure all images are uploaded to S3 and referenced via CDN URLs
 
 
-## Scroll Animations & Effects (Lower Priority)
-- [ ] Create useIntersectionObserver hook for fade-in animations
-- [ ] Add scroll animation CSS utilities to index.css (already added)
-- [ ] Implement fade-in on hero section
-- [ ] Implement fade-in + stagger on feature cards
-- [ ] Implement fade-in + stagger on pricing cards
-- [ ] Implement fade-in on social proof section
+## Scroll Animations & Effects
+- [x] Create useIntersectionObserver hook for fade-in animations
+- [x] Add scroll animation CSS utilities to index.css
+- [x] Implement fade-in on hero section
+- [ ] Refactor feature card animations (avoid hooks in map, use child component)
+- [ ] Refactor pricing card animations (avoid hooks in map, use child component)
+- [x] Implement fade-in on social proof section (needs same refactor)
 - [ ] Test animations on mobile and desktop
 
 
