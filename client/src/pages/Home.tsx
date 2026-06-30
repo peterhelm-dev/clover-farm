@@ -1275,6 +1275,15 @@ export default function Home() {
                         ) : (
                           /* ---- Normal view ---- */
                           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                            {log.imageUrl && (
+                              <div className="shrink-0">
+                                <img
+                                  src={log.imageUrl}
+                                  alt={log.foodName}
+                                  className="w-16 h-16 rounded-lg object-cover border border-border/60"
+                                />
+                              </div>
+                            )}
                             <div className="space-y-1 flex-1 min-w-0">
                               <div className="font-bold text-sm flex items-center gap-2 flex-wrap">
                                 {log.foodName}

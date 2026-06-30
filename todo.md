@@ -116,9 +116,9 @@
 - [x] Ensure all images are uploaded to S3 and referenced via CDN URLs
 
 
-## Scroll Animations & Effects
+## Scroll Animations & Effects (Lower Priority)
 - [ ] Create useIntersectionObserver hook for fade-in animations
-- [ ] Add scroll animation CSS utilities to index.css
+- [ ] Add scroll animation CSS utilities to index.css (already added)
 - [ ] Implement fade-in on hero section
 - [ ] Implement fade-in + stagger on feature cards
 - [ ] Implement fade-in + stagger on pricing cards
@@ -136,3 +136,6 @@
 - [x] Add image storage link to food_logs table (imageUrl field)
 - [x] Display meal images in food log history (stored with imageUrl)
 - [ ] Write tests for image analysis procedures
+- [x] Render meal images in food log history entries
+- [ ] Add crop/rotate controls to image preview modal
+- [ ] Use strict JSON schema for LLM vision response validation
