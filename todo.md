@@ -135,7 +135,7 @@
 - [x] Wire image analysis to nutrition extraction (create food log entry with image)
 - [x] Add image storage link to food_logs table (imageUrl field)
 - [x] Display meal images in food log history (stored with imageUrl)
-- [ ] Write tests for image analysis procedures
+- [x] Write tests for image analysis procedures (6 tests: analyze, parse JSON, handle errors, auth, URL validation, log meal)
 - [x] Render meal images in food log history entries
-- [ ] Add crop/rotate controls to image preview modal
-- [ ] Use strict JSON schema for LLM vision response validation
+- [x] Add crop/rotate controls to image preview modal (rotate 90deg, zoom 0.8-1.5x)
+- [x] Use strict JSON schema for LLM vision response validation (Zod schema with strict types)

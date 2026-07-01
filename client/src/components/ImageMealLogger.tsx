@@ -1,5 +1,5 @@
 import { useState, useRef } from "react";
-import { Camera, Upload, Loader2, AlertCircle, Check } from "lucide-react";
+import { Camera, Upload, Loader2, AlertCircle, Check, RotateCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -16,6 +16,8 @@ export function ImageMealLogger({ onSuccess }: ImageMealLoggerProps) {
   const [imagePreview, setImagePreview] = useState<string>("");
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysisResult, setAnalysisResult] = useState<any>(null);
+  const [rotation, setRotation] = useState(0);
+  const [scale, setScale] = useState(1);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
 
@@ -144,19 +146,56 @@ export function ImageMealLogger({ onSuccess }: ImageMealLoggerProps) {
                   </div>
                 )}
 
-                {/* Image Preview */}
+                {/* Image Preview with Crop/Rotate Controls */}
                 {imagePreview && (
                   <div className="space-y-3">
-                    <img
-                      src={imagePreview}
-                      alt="Meal preview"
-                      className="w-full h-64 object-cover rounded-lg"
-                    />
+                    <div className="relative bg-gray-100 rounded-lg overflow-hidden flex items-center justify-center h-64">
+                      <img
+                        src={imagePreview}
+                        alt="Meal preview"
+                        className="max-w-full max-h-full"
+                        style={{
+                          transform: `rotate(${rotation}deg) scale(${scale})`,
+                          transition: "transform 0.2s",
+                        }}
+                      />
+                    </div>
+                    
+                    {/* Crop/Rotate Controls */}
+                    <div className="space-y-2 p-3 bg-gray-50 rounded-lg">
+                      <div className="flex gap-2 items-center">
+                        <Button
+                          onClick={() => setRotation((r) => (r + 90) % 360)}
+                          variant="outline"
+                          size="sm"
+                          className="gap-1"
+                        >
+                          <RotateCw className="w-4 h-4" />
+                          Rotate
+                        </Button>
+                        <div className="flex-1 flex items-center gap-2">
+                          <span className="text-xs text-gray-600 whitespace-nowrap">Zoom:</span>
+                          <input
+                            type="range"
+                            min="0.8"
+                            max="1.5"
+                            step="0.1"
+                            value={scale}
+                            onChange={(e) => setScale(parseFloat(e.target.value))}
+                            className="flex-1"
+                          />
+                          <span className="text-xs text-gray-600 w-10 text-right">{(scale * 100).toFixed(0)}%</span>
+                        </div>
+                      </div>
+                    </div>
+
                     <div className="flex gap-2">
                       <Button
                         onClick={() => {
                           setImagePreview("");
                           setImageFile(null);
+                          setRotation(0);
+                          setScale(1);
                         }}
                         variant="outline"
                         className="flex-1"

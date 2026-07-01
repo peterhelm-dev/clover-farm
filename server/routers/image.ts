@@ -90,7 +90,21 @@ Respond ONLY with valid JSON, no markdown or extra text.`,
       }
 
       const analysis = JSON.parse(jsonMatch[0]);
-      return analysis;
+      
+      // Validate response schema with strict types
+      const responseSchema = z.object({
+        foodDescription: z.string(),
+        calories: z.number().min(0),
+        protein: z.number().min(0),
+        carbs: z.number().min(0),
+        fat: z.number().min(0),
+        fiber: z.number().min(0),
+        allergens: z.array(z.string()).default([]),
+        confidence: z.enum(['high', 'medium', 'low']).default('medium'),
+      });
+      
+      const validated = responseSchema.parse(analysis);
+      return validated;
     }),
 
   /**
