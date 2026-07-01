@@ -20,6 +20,9 @@ import {
   Sparkles,
 } from "lucide-react";
 import { useIntersectionObserver } from "@/hooks/useIntersectionObserver";
+import { AnimatedFeatureCard } from "@/components/AnimatedFeatureCard";
+import { AnimatedPricingCard } from "@/components/AnimatedPricingCard";
+import { TestimonialCard } from "@/components/TestimonialCard";
 
 // Asset URLs for generated images
 const HERO_BG = "https://d2xsxph8kpxj0f.cloudfront.net/310519663588202014/hU9uCPSS7HGW4CDwXkxoga/hero-background-NnGEqfKJ4rFnfvwpoqp2Ck.webp";
@@ -245,33 +248,17 @@ function Features() {
 
         {/* Feature grid with images */}
         <div className="grid md:grid-cols-2 gap-12 mb-16">
-          {FEATURES.slice(0, 4).map((feature, idx) => {
-            const { ref, isVisible } = useIntersectionObserver({ threshold: 0.2 });
-            return (
-            <div key={idx} ref={ref} className={`flex flex-col gap-6 transition-all duration-1000 ${isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'}`} style={{ transitionDelay: `${idx * 150}ms` }}>
-              <div className="relative">
-                {feature.image && (
-                  <img
-                    src={feature.image}
-                    alt={feature.title}
-                    className="w-full h-80 object-cover rounded-2xl shadow-lg"
-                  />
-                )}
-              </div>
-              <div>
-                <div className="flex items-start gap-3 mb-3">
-                  <div className={`p-3 rounded-lg ${feature.color}`}>
-                    <feature.icon className="w-6 h-6" />
-                  </div>
-                  <div>
-                    <h3 className="text-xl font-bold text-gray-900">{feature.title}</h3>
-                  </div>
-                </div>
-                <p className="text-gray-600 leading-relaxed">{feature.description}</p>
-              </div>
-            </div>
-            );
-          })}
+          {FEATURES.slice(0, 4).map((feature, idx) => (
+            <AnimatedFeatureCard
+              key={idx}
+              image={feature.image}
+              icon={feature.icon}
+              title={feature.title}
+              description={feature.description}
+              color={feature.color}
+              delay={idx * 150}
+            />
+          ))}
         </div>
 
         {/* Additional features without images */}
@@ -312,55 +299,9 @@ function Pricing() {
         </div>
 
         <div className="grid md:grid-cols-3 gap-8 max-w-5xl mx-auto">
-          {PLANS.map((plan, idx) => {
-            const { ref, isVisible } = useIntersectionObserver({ threshold: 0.2 });
-            return (
-            <Card
-              ref={ref}
-              key={idx}
-              className={`relative border-2 transition ${isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'} ${
-                plan.highlight
-                  ? "border-green-600 shadow-xl md:scale-105"
-                  : "border-green-100 hover:border-green-200"
-              }`}
-              style={{ transitionDelay: `${idx * 150}ms` }}
-            >
-              {plan.badge && (
-                <div className="absolute -top-4 left-1/2 transform -translate-x-1/2">
-                  <Badge className="bg-green-600 text-white">{plan.badge}</Badge>
-                </div>
-              )}
-              <CardHeader>
-                <h3 className="text-2xl font-bold text-gray-900">{plan.name}</h3>
-                <p className="text-gray-600 text-sm mt-2">{plan.description}</p>
-                <div className="mt-4">
-                  <span className="text-4xl font-bold text-gray-900">{plan.price}</span>
-                  <span className="text-gray-600 ml-2">/{plan.period}</span>
-                </div>
-              </CardHeader>
-              <CardContent>
-                <a
-                  href={getLoginUrl()}
-                  className={`w-full py-3 rounded-lg font-semibold transition mb-8 block text-center ${
-                    plan.ctaVariant === "default"
-                      ? "bg-green-600 text-white hover:bg-green-700"
-                      : "border-2 border-green-200 text-green-700 hover:bg-green-50"
-                  }`}
-                >
-                  {plan.cta}
-                </a>
-                <ul className="space-y-3">
-                  {plan.features.map((feature, fidx) => (
-                    <li key={fidx} className="flex items-start gap-3">
-                      <Check className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
-                      <span className="text-gray-700">{feature}</span>
-                    </li>
-                  ))}
-                </ul>
-              </CardContent>
-            </Card>
-            );
-          })}
+          {PLANS.map((plan, idx) => (
+            <AnimatedPricingCard key={idx} plan={plan} delay={idx * 150} />
+          ))}
         </div>
       </div>
     </section>
@@ -381,25 +322,9 @@ function SocialProof() {
             { rating: 4.9, count: 2847, text: "Finally a tracker that doesn't feel like a chore" },
             { rating: 4.8, count: 1923, text: "The voice logging is a game changer for me" },
             { rating: 4.9, count: 3156, text: "Best nutrition app I've tried" },
-          ].map((item, idx) => {
-            const { ref, isVisible } = useIntersectionObserver({ threshold: 0.2 });
-            return (
-            <Card ref={ref} key={idx} className={`border-green-100 transition-all duration-1000 ${isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'}`} style={{ transitionDelay: `${idx * 150}ms` }}>
-              <CardContent className="pt-6">
-                <div className="flex gap-1 mb-3">
-                  {[...Array(5)].map((_, i) => (
-                    <Star
-                      key={i}
-                      className="w-5 h-5 fill-amber-400 text-amber-400"
-                    />
-                  ))}
-                </div>
-                <p className="text-gray-700 font-medium mb-4">{item.text}</p>
-                <p className="text-sm text-gray-500">{item.rating} • {item.count} reviews</p>
-              </CardContent>
-            </Card>
-            );
-          })}
+          ].map((item, idx) => (
+            <TestimonialCard key={idx} item={item} delay={idx * 150} />
+          ))}
         </div>
       </div>
     </section>

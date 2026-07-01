@@ -120,10 +120,10 @@
 - [x] Create useIntersectionObserver hook for fade-in animations
 - [x] Add scroll animation CSS utilities to index.css
 - [x] Implement fade-in on hero section
-- [ ] Refactor feature card animations (avoid hooks in map, use child component)
-- [ ] Refactor pricing card animations (avoid hooks in map, use child component)
-- [x] Implement fade-in on social proof section (needs same refactor)
-- [ ] Test animations on mobile and desktop
+- [x] Refactor feature card animations (AnimatedFeatureCard component)
+- [x] Refactor pricing card animations (AnimatedPricingCard component)
+- [x] Refactor testimonial animations (TestimonialCard component)
+- [ ] Manually verify landing page animations on mobile and desktop (visual testing needed)
 
 
 ## Image-Based Meal Logging
