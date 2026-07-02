@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { AIChatBox } from "@/components/AIChatBox";
 import { ImageMealLogger } from "@/components/ImageMealLogger";
+import { WaterIntakeCard } from "@/components/WaterIntakeCard";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { trpc } from "@/lib/trpc";
 import { getLoginUrl } from "@/const";
@@ -1143,6 +1144,8 @@ export default function Home() {
 
             {/* Charts */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              <WaterIntakeCard />
+              
               <Card className="border-border/60 lg:col-span-2">
                 <CardHeader className="p-5 border-b border-border/40">
                   <CardTitle className="font-serif text-base font-bold">7-Day Calorie Trend</CardTitle>

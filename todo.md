@@ -146,8 +146,8 @@
 - [x] Build water.logIntake tRPC procedure (log water in ml, default 250ml per log)
 - [x] Build water.getDaily tRPC procedure (get daily total and goal for a date)
 - [x] Build water.setGoal tRPC procedure (set daily water goal in ml, default 2000ml)
-- [ ] Add water intake card to dashboard (progress circle, log button, goal display)
-- [ ] Add water logging quick button (250ml, 500ml, 1L presets)
+- [x] Add water intake card to dashboard (progress circle, log button, goal display) — mounted in dashboard grid
+- [x] Add water logging quick button (250ml, 500ml, 1L presets) — integrated in WaterIntakeCard
 - [x] Add mealPlans table: id, userId, weekStart, meals (JSON), createdAt
 - [x] Build mealPlan.getSuggestions tRPC procedure (call LLM to generate weekly meal plan)
 - [x] Build mealPlan.save tRPC procedure (save meal plan for the week)
