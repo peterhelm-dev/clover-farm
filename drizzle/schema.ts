@@ -184,3 +184,44 @@ export const appSettings = mysqlTable("appSettings", {
 
 export type AppSettings = typeof appSettings.$inferSelect;
 export type InsertAppSettings = typeof appSettings.$inferInsert;
+
+// ---------------------------------------------------------------------------
+// Water Intake Tracking (daily water consumption logging)
+// ---------------------------------------------------------------------------
+export const waterIntake = mysqlTable("waterIntake", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull(),
+  /** Date for this water log (YYYY-MM-DD) */
+  date: varchar("date", { length: 10 }).notNull(),
+  /** Amount of water logged in milliliters */
+  amount: int("amount").notNull(), // in ml
+  /** Daily water goal in milliliters (default 2000ml) */
+  goal: int("goal").default(2000).notNull(),
+  timestamp: timestamp("timestamp").defaultNow().notNull(),
+});
+
+export type WaterIntake = typeof waterIntake.$inferSelect;
+export type InsertWaterIntake = typeof waterIntake.$inferInsert;
+
+// ---------------------------------------------------------------------------
+// Meal Plans (weekly meal planning suggestions)
+// ---------------------------------------------------------------------------
+export const mealPlans = mysqlTable("mealPlans", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull(),
+  /** Start date of the week (YYYY-MM-DD) */
+  weekStart: varchar("weekStart", { length: 10 }).notNull(),
+  /** JSON array of meal suggestions for the week */
+  meals: json("meals").$type<Array<{
+    day: string;
+    breakfast: string;
+    lunch: string;
+    dinner: string;
+    snack?: string;
+  }>>().default([]),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type MealPlan = typeof mealPlans.$inferSelect;
+export type InsertMealPlan = typeof mealPlans.$inferInsert;

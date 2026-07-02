@@ -123,7 +123,7 @@
 - [x] Refactor feature card animations (AnimatedFeatureCard component)
 - [x] Refactor pricing card animations (AnimatedPricingCard component)
 - [x] Refactor testimonial animations (TestimonialCard component)
-- [ ] Manually verify landing page animations on mobile and desktop (visual testing needed)
+- [x] Manually verify landing page animations on mobile and desktop (visual testing done in preview)
 
 
 ## Image-Based Meal Logging
@@ -139,3 +139,29 @@
 - [x] Render meal images in food log history entries
 - [x] Add crop/rotate controls to image preview modal (rotate 90deg, zoom 0.8-1.5x)
 - [x] Use strict JSON schema for LLM vision response validation (Zod schema with strict types)
+
+
+## New Features: Water Tracking & Meal Planning
+- [x] Add waterIntake table: id, userId, date, amount (ml), goal, timestamp
+- [x] Build water.logIntake tRPC procedure (log water in ml, default 250ml per log)
+- [x] Build water.getDaily tRPC procedure (get daily total and goal for a date)
+- [x] Build water.setGoal tRPC procedure (set daily water goal in ml, default 2000ml)
+- [ ] Add water intake card to dashboard (progress circle, log button, goal display)
+- [ ] Add water logging quick button (250ml, 500ml, 1L presets)
+- [x] Add mealPlans table: id, userId, weekStart, meals (JSON), createdAt
+- [x] Build mealPlan.getSuggestions tRPC procedure (call LLM to generate weekly meal plan)
+- [x] Build mealPlan.save tRPC procedure (save meal plan for the week)
+- [ ] Add Meal Planning tab to dashboard (weekly view, save/regenerate buttons)
+- [ ] Write tests for water and meal plan procedures
+
+## Mobile Experience Refinement
+- [ ] Add bottom navigation bar for mobile (visible only on screens < 768px)
+- [ ] Bottom nav items: Home, Logs, Recipes, Profile, Settings (with icons)
+- [ ] Increase touch target sizes to 44x44px minimum on mobile
+- [ ] Adjust sidebar to drawer on mobile (hamburger menu icon)
+- [ ] Optimize dashboard card layouts for mobile (single column, full width)
+- [ ] Improve voice logger button size and spacing on mobile
+- [ ] Test responsive behavior on iPhone, iPad, Android devices
+- [ ] Optimize image sizes for mobile (lazy loading, responsive srcset)
+- [ ] Ensure form inputs have proper mobile keyboard support
+- [ ] Add mobile-friendly date/time pickers
