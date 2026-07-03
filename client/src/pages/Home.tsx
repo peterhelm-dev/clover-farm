@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from "react";
 import { AIChatBox } from "@/components/AIChatBox";
 import { ImageMealLogger } from "@/components/ImageMealLogger";
 import { WaterIntakeCard } from "@/components/WaterIntakeCard";
+import { MealPlanningTab } from "@/components/MealPlanningTab";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { trpc } from "@/lib/trpc";
 import { getLoginUrl } from "@/const";
@@ -414,7 +415,7 @@ export default function Home() {
   });
 
   // ---- UI state ----
-  const [activeTab, setActiveTab] = useState<"dashboard" | "voice-logger" | "calendar" | "recipes" | "travel" | "integrations" | "billing">("dashboard");
+  const [activeTab, setActiveTab] = useState<"dashboard" | "voice-logger" | "calendar" | "recipes" | "mealplan" | "travel" | "integrations" | "billing">("dashboard");
   const [editingLogId, setEditingLogId] = useState<number | null>(null);
   const [editForm, setEditForm] = useState<{ foodName: string; quantity: string; calories: string; protein: string; carbs: string; fat: string; fiber: string }>({ foodName: "", quantity: "", calories: "", protein: "", carbs: "", fat: "", fiber: "" });
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
@@ -1008,6 +1009,7 @@ export default function Home() {
               { id: "voice-logger" as const, label: "Voice Food Logger", icon: Mic, pulse: true },
               { id: "calendar" as const, label: "Calendar View", icon: Calendar, pulse: false },
               { id: "recipes" as const, label: "Curated Recipes", icon: Apple, pulse: false },
+              { id: "mealplan" as const, label: "Meal Planning", icon: Wheat, pulse: false },
               { id: "travel" as const, label: "Travel Sourcing", icon: Compass, pulse: false },
               { id: "integrations" as const, label: "Integrations", icon: Smartphone, pulse: false },
           { id: "billing" as const, label: "Manage Plan", icon: CreditCard, pulse: false },
@@ -1671,12 +1673,15 @@ export default function Home() {
           </div>
         )}
 
-        {/* ===== D. CURATED RECIPES ===== */}
+                {/* ===== D. CURATED RECIPES ===== */}
         {activeTab === "recipes" && (
           <RecipesTab profile={profile} />
         )}
-
-        {/* ===== E. TRAVEL SOURCING ===== */}
+        {/* ===== E. MEAL PLANNING ===== */}
+        {activeTab === "mealplan" && (
+          <MealPlanningTab />
+        )}
+        {/* ===== F. TRAVEL SOURCING ===== */}
         {activeTab === "travel" && (
           <div className="space-y-8 max-w-4xl">
             <div>

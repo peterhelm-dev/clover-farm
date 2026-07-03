@@ -151,7 +151,7 @@
 - [x] Add mealPlans table: id, userId, weekStart, meals (JSON), createdAt
 - [x] Build mealPlan.getSuggestions tRPC procedure (call LLM to generate weekly meal plan)
 - [x] Build mealPlan.save tRPC procedure (save meal plan for the week)
-- [ ] Add Meal Planning tab to dashboard (weekly view, save/regenerate buttons)
+- [x] Add Meal Planning tab to dashboard (weekly view, save/regenerate buttons)
 - [ ] Write tests for water and meal plan procedures
 
 ## Mobile Experience Refinement
