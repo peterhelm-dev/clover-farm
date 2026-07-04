@@ -25,18 +25,77 @@ export function ImageMealLogger({ onSuccess }: ImageMealLoggerProps) {
   const analyzeImageMutation = trpc.image.analyzeImage.useMutation();
   const logMealMutation = trpc.image.logMealFromImage.useMutation();
 
-  const handleFileSelect = (file: File) => {
+  const compressImage = async (file: File): Promise<File> => {
+    return new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = (event) => {
+        const img = new Image();
+        img.src = event.target?.result as string;
+        img.onload = () => {
+          const canvas = document.createElement("canvas");
+          const ctx = canvas.getContext("2d");
+          if (!ctx) return resolve(file);
+
+          const maxWidth = 1200;
+          const maxHeight = 1200;
+          let width = img.width;
+          let height = img.height;
+
+          if (width > height) {
+            if (width > maxWidth) {
+              height = (height * maxWidth) / width;
+              width = maxWidth;
+            }
+          } else {
+            if (height > maxHeight) {
+              width = (width * maxHeight) / height;
+              height = maxHeight;
+            }
+          }
+
+          canvas.width = width;
+          canvas.height = height;
+          ctx.drawImage(img, 0, 0, width, height);
+
+          canvas.toBlob(
+            (blob) => {
+              if (blob) {
+                const compressedFile = new File([blob], file.name, { type: "image/jpeg" });
+                resolve(compressedFile);
+              } else {
+                resolve(file);
+              }
+            },
+            "image/jpeg",
+            0.8
+          );
+        };
+      };
+    });
+  };
+
+  const handleFileSelect = async (file: File) => {
     if (!file.type.startsWith("image/")) {
       toast.error("Please select an image file");
       return;
     }
 
-    setImageFile(file);
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error("Image is too large (max 5MB). Please select a smaller image.");
+      return;
+    }
+
+    const compressedFile = await compressImage(file);
+    setImageFile(compressedFile);
     const reader = new FileReader();
     reader.onload = (e) => {
       setImagePreview(e.target?.result as string);
     };
-    reader.readAsDataURL(file);
+    reader.onerror = () => {
+      toast.error("Failed to read image file");
+    };
+    reader.readAsDataURL(compressedFile);
   };
 
   const handleAnalyzeImage = async () => {
@@ -47,31 +106,41 @@ export function ImageMealLogger({ onSuccess }: ImageMealLoggerProps) {
 
     setIsAnalyzing(true);
     try {
-      // Step 1: Upload image to S3
       const reader = new FileReader();
       reader.onload = async (e) => {
-        const base64 = (e.target?.result as string).split(",")[1];
-        const uploadResult = await uploadImageMutation.mutateAsync({
-          imageData: base64,
-          fileName: imageFile.name,
-        });
+        try {
+          const base64 = (e.target?.result as string).split(",")[1];
+          if (!base64) throw new Error("Failed to encode image");
 
-        // Step 2: Analyze image with LLM
-        const analysis = await analyzeImageMutation.mutateAsync({
-          imageUrl: uploadResult.url,
-        });
+          const uploadResult = await uploadImageMutation.mutateAsync({
+            imageData: base64,
+            fileName: imageFile.name,
+          });
 
-        setAnalysisResult({
-          ...analysis,
-          imageUrl: uploadResult.url,
-        });
-        toast.success("Image analyzed! Review the results below.");
+          const analysis = await analyzeImageMutation.mutateAsync({
+            imageUrl: uploadResult.url,
+          });
+
+          setAnalysisResult({
+            ...analysis,
+            imageUrl: uploadResult.url,
+          });
+          toast.success("Image analyzed! Review the results below.");
+          setIsAnalyzing(false);
+        } catch (innerError: any) {
+          console.error("Analysis error:", innerError);
+          toast.error(innerError?.message || "Failed to analyze image. Please try again.");
+          setIsAnalyzing(false);
+        }
+      };
+      reader.onerror = () => {
+        toast.error("Failed to read image file");
+        setIsAnalyzing(false);
       };
       reader.readAsDataURL(imageFile);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Analysis error:", error);
-      toast.error("Failed to analyze image. Please try again.");
-    } finally {
+      toast.error(error?.message || "Failed to process image. Please try again.");
       setIsAnalyzing(false);
     }
   };
@@ -97,10 +166,12 @@ export function ImageMealLogger({ onSuccess }: ImageMealLoggerProps) {
       setImageFile(null);
       setImagePreview("");
       setAnalysisResult(null);
+      setRotation(0);
+      setScale(1);
       onSuccess?.();
-    } catch (error) {
+    } catch (error: any) {
       console.error("Log error:", error);
-      toast.error("Failed to log meal. Please try again.");
+      toast.error(error?.message || "Failed to log meal. Please try again.");
     }
   };
 
@@ -124,7 +195,6 @@ export function ImageMealLogger({ onSuccess }: ImageMealLoggerProps) {
           <div className="space-y-4">
             {!analysisResult ? (
               <>
-                {/* Image Selection */}
                 {!imagePreview && (
                   <div className="grid grid-cols-2 gap-3">
                     <Button
@@ -146,7 +216,6 @@ export function ImageMealLogger({ onSuccess }: ImageMealLoggerProps) {
                   </div>
                 )}
 
-                {/* Image Preview with Crop/Rotate Controls */}
                 {imagePreview && (
                   <div className="space-y-3">
                     <div className="relative bg-gray-100 rounded-lg overflow-hidden flex items-center justify-center h-64">
@@ -161,7 +230,6 @@ export function ImageMealLogger({ onSuccess }: ImageMealLoggerProps) {
                       />
                     </div>
                     
-                    {/* Crop/Rotate Controls */}
                     <div className="space-y-2 p-3 bg-gray-50 rounded-lg">
                       <div className="flex gap-2 items-center">
                         <Button
@@ -220,7 +288,6 @@ export function ImageMealLogger({ onSuccess }: ImageMealLoggerProps) {
                   </div>
                 )}
 
-                {/* Hidden file inputs */}
                 <input
                   ref={fileInputRef}
                   type="file"
@@ -245,7 +312,6 @@ export function ImageMealLogger({ onSuccess }: ImageMealLoggerProps) {
               </>
             ) : (
               <>
-                {/* Analysis Results */}
                 <Card className="border-green-200 bg-green-50">
                   <CardHeader>
                     <CardTitle className="text-lg flex items-center gap-2">
