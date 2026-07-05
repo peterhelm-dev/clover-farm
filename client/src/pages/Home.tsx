@@ -4,7 +4,6 @@ import { ImageMealLogger } from "@/components/ImageMealLogger";
 import { WaterIntakeCard } from "@/components/WaterIntakeCard";
 import { MealPlanningTab } from "@/components/MealPlanningTab";
 import { useAuth } from "@/_core/hooks/useAuth";
-import { useDashboardTab } from "@/contexts/DashboardTabContext";
 import { trpc } from "@/lib/trpc";
 import { getLoginUrl } from "@/const";
 import { Button } from "@/components/ui/button";
@@ -417,8 +416,8 @@ export default function Home() {
 
   // ---- UI state ----
   const [activeTab, setActiveTab] = useState<"dashboard" | "voice-logger" | "calendar" | "recipes" | "mealplan" | "travel" | "integrations" | "billing">("dashboard");
-  const { activeTab, setActiveTab } = useDashboardTab();
-  const { activeTab, setActiveTab } = useDashboardTab();
+  const [editingLogId, setEditingLogId] = useState<number | null>(null);
+  const [editForm, setEditForm] = useState<{ foodName: string; quantity: string; calories: string; protein: string; carbs: string; fat: string; fiber: string }>({ foodName: "", quantity: "", calories: "", protein: "", carbs: "", fat: "", fiber: "" });
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
 
   // ---- onboarding wizard ----

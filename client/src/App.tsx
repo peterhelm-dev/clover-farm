@@ -11,7 +11,6 @@ import BetaInvitePage from "./pages/BetaInvitePage";
 import PrivacyPolicy from "./pages/PrivacyPolicy";
 import TermsOfService from "./pages/TermsOfService";
 import FeedbackButton from "./components/FeedbackButton";
-import { MobileBottomNav } from "./components/MobileBottomNav";
 import { useAuth } from "./_core/hooks/useAuth";
 
 /**
@@ -63,7 +62,6 @@ function App() {
           <Toaster />
           <Router />
           <GlobalFeedbackButton />
-          <MobileBottomNav />
         </TooltipProvider>
       </ThemeProvider>
     </ErrorBoundary>
