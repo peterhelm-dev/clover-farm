@@ -4,6 +4,7 @@ import { ImageMealLogger } from "@/components/ImageMealLogger";
 import { WaterIntakeCard } from "@/components/WaterIntakeCard";
 import { MealPlanningTab } from "@/components/MealPlanningTab";
 import { useAuth } from "@/_core/hooks/useAuth";
+import { useDashboardTab } from "@/contexts/DashboardTabContext";
 import { trpc } from "@/lib/trpc";
 import { getLoginUrl } from "@/const";
 import { Button } from "@/components/ui/button";
