@@ -155,8 +155,8 @@
 - [ ] Write tests for water and meal plan procedures
 
 ## Mobile Experience Refinement
-- [ ] Add bottom navigation bar for mobile (visible only on screens < 768px)
-- [ ] Bottom nav items: Home, Logs, Recipes, Profile, Settings (with icons)
+- [x] Add bottom navigation bar for mobile (visible only on screens < 768px) — MobileBottomNav component with tab context
+- [x] Bottom nav items: Home, Logs, Recipes, Profile, Settings (with icons) — integrated with DashboardTabContext
 - [ ] Increase touch target sizes to 44x44px minimum on mobile
 - [ ] Adjust sidebar to drawer on mobile (hamburger menu icon)
 - [ ] Optimize dashboard card layouts for mobile (single column, full width)
