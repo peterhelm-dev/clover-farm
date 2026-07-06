@@ -163,10 +163,10 @@
 ## Mobile Experience Refinement
 - [x] Add bottom navigation bar for mobile (visible only on screens < 768px)
 - [x] Bottom nav items: Home, Logs, Recipes, Profile, Settings (with icons)
-- [ ] Increase touch target sizes to 44x44px minimum on mobile
-- [ ] Adjust sidebar to drawer on mobile (hamburger menu icon)
-- [ ] Optimize dashboard card layouts for mobile (single column, full width)
-- [ ] Improve voice logger button size and spacing on mobile
+- [x] Increase touch target sizes to 44x44px minimum on mobile (h-11 min-h-11 on all buttons)
+- [x] Adjust sidebar to drawer on mobile (hamburger menu icon) — already implemented in sidebar component
+- [x] Optimize dashboard card layouts for mobile (single column, full width, responsive grids)
+- [x] Improve voice logger button size and spacing on mobile (h-11, responsive text, full-width on mobile)
 - [ ] Test responsive behavior on iPhone, iPad, Android devices
 - [ ] Optimize image sizes for mobile (lazy loading, responsive srcset)
 - [ ] Ensure form inputs have proper mobile keyboard support

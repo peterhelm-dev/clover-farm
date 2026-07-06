@@ -185,10 +185,11 @@ export function ImageMealLogger({ onSuccess }: ImageMealLoggerProps) {
       <Button
         onClick={() => setIsOpen(true)}
         variant="outline"
-        className="gap-2"
+        className="gap-2 h-11 sm:h-auto min-w-11 sm:min-w-0"
       >
         <Camera className="w-4 h-4" />
-        Log Meal with Photo
+        <span className="hidden sm:inline">Log Meal with Photo</span>
+        <span className="sm:hidden">Photo</span>
       </Button>
 
       <Dialog open={isOpen} onOpenChange={setIsOpen}>

@@ -1113,16 +1113,16 @@ export default function Home() {
                 <h2 className="text-2xl sm:text-3xl font-serif font-bold tracking-tight">Your Health Habits</h2>
                 <p className="text-xs text-muted-foreground mt-1">Real-time daily tracking powered by AI voice-logging.</p>
               </div>
-              <div className="flex gap-2">
+              <div className="flex gap-2 w-full sm:w-auto flex-col sm:flex-row">
                 <ImageMealLogger onSuccess={() => todayLogsQuery.refetch()} />
-                <Button onClick={() => setActiveTab("voice-logger")} className="gap-1.5 text-xs">
-                  <Mic className="h-3.5 w-3.5" /> Log Food
+                <Button onClick={() => setActiveTab("voice-logger")} className="gap-1.5 text-xs h-11 sm:h-auto min-w-11 sm:min-w-0">
+                  <Mic className="h-4 w-4" /> Log Food
                 </Button>
               </div>
             </div>
 
             {/* Macro progress cards — 5 cards including fiber */}
-            <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 sm:gap-4">
               {[
                 { label: "Calories", value: Math.round(dailyTotals.calories), target: calorieTarget, unit: "kcal", color: "text-foreground" },
                 { label: "Protein", value: Math.round(dailyTotals.protein), target: proteinTarget, unit: "g", color: "text-emerald-600" },
@@ -1146,15 +1146,15 @@ export default function Home() {
             </div>
 
             {/* Charts */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
               <WaterIntakeCard />
               
-              <Card className="border-border/60 lg:col-span-2">
-                <CardHeader className="p-5 border-b border-border/40">
-                  <CardTitle className="font-serif text-base font-bold">7-Day Calorie Trend</CardTitle>
+              <Card className="border-border/60 md:col-span-2 lg:col-span-2">
+                <CardHeader className="p-4 sm:p-5 border-b border-border/40">
+                  <CardTitle className="font-serif text-sm sm:text-base font-bold">7-Day Calorie Trend</CardTitle>
                   <CardDescription className="text-xs">Your actual intake vs. daily target.</CardDescription>
                 </CardHeader>
-                <CardContent className="p-5 h-64">
+                <CardContent className="p-4 sm:p-5 h-48 sm:h-64">
                   <ResponsiveContainer width="100%" height="100%">
                     <AreaChart data={chartData}>
                       <defs>
@@ -1174,11 +1174,11 @@ export default function Home() {
               </Card>
 
               <Card className="border-border/60">
-                <CardHeader className="p-5 border-b border-border/40">
-                  <CardTitle className="font-serif text-base font-bold">Macro Split (Today)</CardTitle>
+                <CardHeader className="p-4 sm:p-5 border-b border-border/40">
+                  <CardTitle className="font-serif text-sm sm:text-base font-bold">Macro Split (Today)</CardTitle>
                   <CardDescription className="text-xs">Energy distribution in calories.</CardDescription>
                 </CardHeader>
-                <CardContent className="p-5 flex flex-col items-center justify-center h-64">
+                <CardContent className="p-4 sm:p-5 flex flex-col items-center justify-center h-48 sm:h-64">
                   {dailyTotals.calories > 0 ? (
                     <>
                       <ResponsiveContainer width="100%" height={140}>

@@ -103,7 +103,7 @@ export function WaterIntakeCard() {
               disabled={logIntakeMutation.isPending}
               variant={selectedPreset === preset.value ? "default" : "outline"}
               size="sm"
-              className="text-xs"
+              className="text-xs h-11 sm:h-auto min-h-11 sm:min-h-0"
             >
               {logIntakeMutation.isPending ? (
                 <span className="animate-spin">⟳</span>
