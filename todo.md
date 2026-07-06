@@ -139,6 +139,7 @@
 - [x] Render meal images in food log history entries
 - [x] Add crop/rotate controls to image preview modal (rotate 90deg, zoom 0.8-1.5x)
 - [x] Use strict JSON schema for LLM vision response validation (Zod schema with strict types)
+- [x] Fix Invalid URL error in image analysis (convert relative URL to absolute URL before LLM call)
 
 
 ## New Features: Water Tracking & Meal Planning
@@ -152,7 +153,12 @@
 - [x] Build mealPlan.getSuggestions tRPC procedure (call LLM to generate weekly meal plan)
 - [x] Build mealPlan.save tRPC procedure (save meal plan for the week)
 - [x] Add Meal Planning tab to dashboard (weekly view, save/regenerate buttons)
-- [ ] Write tests for water and meal plan procedures
+- [x] Write tests for water and meal plan procedures (10 water tests, 8 meal plan tests)
+
+## Features Showcase Page
+- [x] Create /features page with hero section and feature cards
+- [x] Add 8 feature cards: photo-based logging, voice logging, water tracking, meal planning, AI insights, recipes, macro tracking, privacy
+- [x] Add features page link to landing page navigation and footer
 
 ## Mobile Experience Refinement
 - [x] Add bottom navigation bar for mobile (visible only on screens < 768px)

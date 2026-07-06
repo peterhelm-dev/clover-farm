@@ -117,8 +117,13 @@ export function ImageMealLogger({ onSuccess }: ImageMealLoggerProps) {
             fileName: imageFile.name,
           });
 
+          // Convert relative URL to absolute URL for LLM vision API
+          const absoluteUrl = uploadResult.url.startsWith('http')
+            ? uploadResult.url
+            : `${window.location.origin}${uploadResult.url}`;
+
           const analysis = await analyzeImageMutation.mutateAsync({
-            imageUrl: uploadResult.url,
+            imageUrl: absoluteUrl,
           });
 
           setAnalysisResult({
