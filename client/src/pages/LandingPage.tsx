@@ -150,7 +150,7 @@ function Header() {
           <span className="text-xl font-bold text-green-900">Clover Wellness</span>
         </div>
         <nav className="hidden md:flex items-center gap-8">
-          <a href="#features" className="text-gray-700 hover:text-green-600 transition">
+          <a href="/features" className="text-gray-700 hover:text-green-600 transition">
             Features
           </a>
           <a href="#pricing" className="text-gray-700 hover:text-green-600 transition">
@@ -346,7 +346,7 @@ function Footer() {
           <div>
             <h4 className="font-semibold text-white mb-4">Product</h4>
             <ul className="space-y-2 text-sm">
-              <li><a href="#features" className="hover:text-green-400 transition">Features</a></li>
+              <li><a href="/features" className="hover:text-green-400 transition">Features</a></li>
               <li><a href="#pricing" className="hover:text-green-400 transition">Pricing</a></li>
               <li><a href={getLoginUrl()} className="hover:text-green-400 transition">Sign in</a></li>
             </ul>
