@@ -128,7 +128,7 @@ export function ImageMealLogger({ onSuccess }: ImageMealLoggerProps) {
 
           setAnalysisResult({
             ...analysis,
-            imageUrl: uploadResult.url,
+            imageUrl: absoluteUrl,
           });
           toast.success("Image analyzed! Review the results below.");
           setIsAnalyzing(false);

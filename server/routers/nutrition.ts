@@ -53,7 +53,7 @@ const NUTRITION_JSON_SCHEMA = {
       clarifyingQuestion: {
         type: ["string", "null"],
         description:
-          "A single follow-up question to ask the user if key details are ambiguous (e.g. cooking method, portion size, brand). Set to null if the description is already clear enough.",
+          "If — and only if — the meal has multiple ambiguous details (cooking method, portion size, ingredient choice, brand), combine ALL of them into ONE single, natural-sounding question here (e.g. 'What kind of nuts were in the oatmeal, and roughly how much hummus and how many chips did you have?'). This is your only chance to ask — never plan to ask a follow-up after this. Set to null if the description is already clear enough to estimate confidently.",
       },
       confidence: {
         type: "string",
@@ -91,7 +91,9 @@ Your job is to analyze natural-language food descriptions (spoken or typed) and 
 Guidelines:
 - Use USDA FoodData Central values as your reference for nutritional estimates.
 - When quantities are not specified, use the most common serving size for that food.
-- If cooking method is ambiguous (e.g. eggs could be fried, scrambled, boiled), assume the simplest preparation unless context suggests otherwise, but ask a clarifying question.
+- If cooking method is ambiguous (e.g. eggs could be fried, scrambled, boiled), assume the simplest preparation unless context suggests otherwise.
+- You get ONE opportunity to ask for clarification per meal, ever. If there are several ambiguous details, bundle them all into a single natural-sounding question (see clarifyingQuestion field). Do not ask about anything you could reasonably assume instead — only ask about things that meaningfully change the estimate or allergen detection.
+- If this message already contains "Additional context from user" (i.e. the user already answered a clarifying question, or chose to skip), you MUST return clarifyingQuestion: null and give your best estimate with whatever information you have — do not ask again under any circumstances.
 - Always detect common allergens: Gluten, Dairy, Peanuts, Tree Nuts, Eggs, Soy, Shellfish, Fish.
 - Be conservative with calorie estimates — round to the nearest 5 kcal.
 - Macros should be in grams, rounded to 1 decimal place.

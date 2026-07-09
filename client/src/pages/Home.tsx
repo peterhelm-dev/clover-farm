@@ -17,7 +17,7 @@ import {
   Mic, MicOff, BrainCircuit, Heart, AlertTriangle, Apple, Compass,
   LogOut, Activity, BarChart3, Bell, RefreshCw, Smartphone, ChevronRight,
   ChevronLeft, Send, SkipForward, Loader2, Wheat, Trash2, Pencil, Crown, X, CreditCard,
-  Share2, Copy, Gift, Shield
+  Share2, Copy, Gift, Shield, Camera
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -34,12 +34,25 @@ import { MOCK_TRAVEL_CALENDAR } from "@shared/const";
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
+type LoggedMealSummary = {
+  foodName: string;
+  calories: number;
+  protein: number;
+  carbs: number;
+  fat: number;
+  fiber: number;
+  allergens: string[];
+  notes?: string | null;
+};
+
 type ChatMessage = {
   id: string;
   role: "user" | "ai" | "system";
   text: string;
   confidence?: "high" | "medium" | "low";
   logSaved?: boolean;
+  imageDataUrl?: string;
+  loggedMeal?: LoggedMealSummary;
 };
 
 type OnboardStep = "age" | "weight" | "diet" | "allergies" | "conditions" | "referral" | "done";
@@ -64,6 +77,68 @@ function confidenceColor(c: "high" | "medium" | "low") {
   if (c === "high") return "border-emerald-300 text-emerald-700 bg-emerald-50";
   if (c === "medium") return "border-amber-300 text-amber-700 bg-amber-50";
   return "border-red-300 text-red-700 bg-red-50";
+}
+
+// ---------------------------------------------------------------------------
+// LoggedMealCard sub-component — the polished "meal saved" confirmation
+// ---------------------------------------------------------------------------
+function LoggedMealCard({
+  meal,
+  confidence,
+}: {
+  meal: LoggedMealSummary;
+  confidence?: "high" | "medium" | "low";
+}) {
+  const macros = [
+    { label: "Calories", value: `${Math.round(meal.calories)} kcal` },
+    { label: "Protein", value: `${Math.round(meal.protein)}g` },
+    { label: "Carbs", value: `${Math.round(meal.carbs)}g` },
+    { label: "Fat", value: `${Math.round(meal.fat)}g` },
+    { label: "Fiber", value: `${Math.round(meal.fiber)}g` },
+  ];
+
+  return (
+    <div className="rounded-2xl border border-emerald-200 bg-emerald-50/60 overflow-hidden">
+      <div className="flex items-center gap-2 px-4 pt-3">
+        <div className="h-5 w-5 rounded-full bg-emerald-500 flex items-center justify-center shrink-0">
+          <Check className="h-3 w-3 text-white" />
+        </div>
+        <span className="text-sm font-semibold text-emerald-800">Logged</span>
+        {confidence && (
+          <Badge variant="outline" className={`text-[9px] ml-auto ${confidenceColor(confidence)}`}>
+            {confidence} confidence
+          </Badge>
+        )}
+      </div>
+
+      <div className="px-4 pt-2 pb-3">
+        <p className="text-sm font-medium text-foreground">{meal.foodName}</p>
+      </div>
+
+      <div className="grid grid-cols-5 gap-px bg-emerald-200/60 border-y border-emerald-200">
+        {macros.map(m => (
+          <div key={m.label} className="bg-white px-2 py-2 text-center">
+            <div className="text-[9px] uppercase tracking-wide text-muted-foreground">{m.label}</div>
+            <div className="text-xs font-semibold mt-0.5">{m.value}</div>
+          </div>
+        ))}
+      </div>
+
+      {(meal.notes || meal.allergens.length > 0) && (
+        <div className="px-4 py-3 space-y-2">
+          {meal.notes && (
+            <p className="text-xs text-muted-foreground italic">{meal.notes}</p>
+          )}
+          {meal.allergens.length > 0 && (
+            <div className="flex items-start gap-1.5 text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-1.5">
+              <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+              <span>Allergens detected: {meal.allergens.join(", ")}</span>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -378,6 +453,14 @@ export default function Home() {
     onSuccess: () => utils.foodLogs.getProfile.invalidate(),
   });
   const analyzeTranscript = trpc.nutrition.analyzeTranscript.useMutation();
+  const uploadImageMutation = trpc.image.uploadImage.useMutation();
+  const analyzeImageMutation = trpc.image.analyzeImage.useMutation();
+  const logMealFromImageMutation = trpc.image.logMealFromImage.useMutation({
+    onSuccess: () => {
+      utils.foodLogs.getByDate.invalidate();
+      utils.foodLogs.getAll.invalidate();
+    },
+  });
   const healthOverviewMutation = trpc.healthInsights.overview.useMutation();
   const healthChatMutation = trpc.healthInsights.chat.useMutation();
   const deleteLogMutation = trpc.foodLogs.delete.useMutation({
@@ -438,9 +521,13 @@ export default function Home() {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [pendingTranscript, setPendingTranscript] = useState("");
   const [awaitingClarification, setAwaitingClarification] = useState(false);
+  const [clarificationRound, setClarificationRound] = useState(0);
+  const [clarificationHistory, setClarificationHistory] = useState<string[]>([]);
   const [speechErrorTip, setSpeechErrorTip] = useState<string | null>(null);
+  const [isAnalyzingPhoto, setIsAnalyzingPhoto] = useState(false);
   const recognitionRef = useRef<any>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
+  const photoInputRef = useRef<HTMLInputElement>(null);
 
   // ---- calendar ----
   const [calendarDate, setCalendarDate] = useState(() => new Date());
@@ -598,7 +685,11 @@ export default function Home() {
     setChatMessages(prev => [...prev, { ...msg, id: `${Date.now()}-${Math.random()}` }]);
   }, []);
 
-  const processText = useCallback(async (text: string, clarificationCtx?: string) => {
+  // We only ever ask ONE clarifying question per meal (bundling every
+  // ambiguous detail into it) — the prompt asks the model to comply, and
+  // `round` is the client-side backstop: on the second pass we finalize
+  // with whatever we have regardless of what the model returns.
+  const processText = useCallback(async (text: string, clarificationCtx: string | undefined, round: number) => {
     setIsAnalyzing(true);
     try {
       const result = await analyzeTranscript.mutateAsync({
@@ -607,42 +698,54 @@ export default function Home() {
         knownAllergies,
       });
 
-      if (result.clarifyingQuestion) {
+      if (result.clarifyingQuestion && round === 0) {
         setAwaitingClarification(true);
+        setClarificationRound(1);
         setPendingTranscript(text);
         addChatMsg({
           role: "ai",
           text: result.clarifyingQuestion,
           confidence: result.confidence,
         });
-      } else {
-        // Save to DB
-        await saveLogMutation.mutateAsync({
-          rawSpeech: clarificationCtx ? `${text} | Clarified: ${clarificationCtx}` : text,
+        setIsAnalyzing(false);
+        return;
+      }
+
+      // Save to DB
+      await saveLogMutation.mutateAsync({
+        rawSpeech: clarificationCtx ? `${text} | Clarified: ${clarificationCtx}` : text,
+        foodName: result.foodName,
+        quantity: result.quantity,
+        calories: result.calories,
+        protein: result.protein,
+        carbs: result.carbs,
+        fat: result.fat,
+        fiber: result.fiber ?? 0,
+        allergensDetected: result.allergensDetected,
+        confidence: result.confidence,
+        notes: result.notes ?? undefined,
+      });
+      setAwaitingClarification(false);
+      setPendingTranscript("");
+      setClarificationRound(0);
+      setClarificationHistory([]);
+
+      addChatMsg({
+        role: "ai",
+        text: "",
+        confidence: result.confidence,
+        logSaved: true,
+        loggedMeal: {
           foodName: result.foodName,
-          quantity: result.quantity,
           calories: result.calories,
           protein: result.protein,
           carbs: result.carbs,
           fat: result.fat,
           fiber: result.fiber ?? 0,
-          allergensDetected: result.allergensDetected,
-          confidence: result.confidence,
-          notes: result.notes ?? undefined,
-        });
-        setAwaitingClarification(false);
-        setPendingTranscript("");
-
-        const allergenWarning = result.allergensDetected.length > 0
-          ? ` ⚠️ Allergen alert: ${result.allergensDetected.join(", ")}.`
-          : "";
-        addChatMsg({
-          role: "ai",
-          text: `Logged **${result.foodName}** — ${Math.round(result.calories)} kcal | ${Math.round(result.protein)}g protein | ${Math.round(result.carbs)}g carbs | ${Math.round(result.fat)}g fat | ${Math.round(result.fiber ?? 0)}g fiber.${result.notes ? `\n\n_${result.notes}_` : ""}${allergenWarning}`,
-          confidence: result.confidence,
-          logSaved: true,
-        });
-      }
+          allergens: result.allergensDetected,
+          notes: result.notes,
+        },
+      });
     } catch (err: any) {
       const msg = err?.message ?? "";
       if (msg.includes("AI call limit") || msg.includes("Upgrade")) {
@@ -664,16 +767,87 @@ export default function Home() {
     addChatMsg({ role: "user", text });
 
     if (awaitingClarification) {
-      await processText(pendingTranscript, text);
+      const history = [...clarificationHistory, text];
+      setClarificationHistory(history);
+      await processText(pendingTranscript, history.join("; "), clarificationRound);
     } else {
-      await processText(text);
+      await processText(text, undefined, 0);
     }
   };
 
   const handleSkipClarification = async () => {
     if (!pendingTranscript) return;
     addChatMsg({ role: "user", text: "Skip — use average estimate" });
-    await processText(pendingTranscript, "User skipped clarification, use average estimates.");
+    const history = [...clarificationHistory, "User skipped clarification, use average estimates."];
+    setClarificationHistory(history);
+    await processText(pendingTranscript, history.join("; "), clarificationRound);
+  };
+
+  const handlePhotoSelected = (file: File) => {
+    setIsAnalyzingPhoto(true);
+    const reader = new FileReader();
+    reader.onload = async e => {
+      try {
+        const dataUrl = e.target?.result as string;
+        const base64 = dataUrl.split(",")[1];
+        if (!base64) throw new Error("Failed to encode image");
+
+        addChatMsg({ role: "user", text: "", imageDataUrl: dataUrl });
+
+        const uploadResult = await uploadImageMutation.mutateAsync({
+          imageData: base64,
+          fileName: file.name,
+        });
+        const absoluteUrl = uploadResult.url.startsWith("http")
+          ? uploadResult.url
+          : `${window.location.origin}${uploadResult.url}`;
+
+        const analysis = await analyzeImageMutation.mutateAsync({ imageUrl: absoluteUrl });
+
+        await logMealFromImageMutation.mutateAsync({
+          imageUrl: absoluteUrl,
+          foodDescription: analysis.foodDescription,
+          calories: analysis.calories,
+          protein: analysis.protein,
+          carbs: analysis.carbs,
+          fat: analysis.fat,
+          fiber: analysis.fiber,
+          allergens: analysis.allergens,
+          confidence: analysis.confidence,
+        });
+
+        addChatMsg({
+          role: "ai",
+          text: "",
+          confidence: analysis.confidence,
+          logSaved: true,
+          loggedMeal: {
+            foodName: analysis.foodDescription,
+            calories: analysis.calories,
+            protein: analysis.protein,
+            carbs: analysis.carbs,
+            fat: analysis.fat,
+            fiber: analysis.fiber,
+            allergens: analysis.allergens,
+          },
+        });
+      } catch (err: any) {
+        const msg = err?.message ?? "";
+        if (msg.includes("AI call limit") || msg.includes("Upgrade")) {
+          setShowUpgradeModal(true);
+          addChatMsg({ role: "ai", text: "You've reached your free tier limit. Upgrade to Clover Plus for unlimited logging! 🌿" });
+        } else {
+          addChatMsg({ role: "ai", text: "Sorry, that photo couldn't be analyzed. Please try again." });
+        }
+      } finally {
+        setIsAnalyzingPhoto(false);
+      }
+    };
+    reader.onerror = () => {
+      toast.error("Failed to read image file");
+      setIsAnalyzingPhoto(false);
+    };
+    reader.readAsDataURL(file);
   };
 
   const startRecording = () => {
@@ -721,9 +895,11 @@ export default function Home() {
           setChatInput("");
           addChatMsg({ role: "user", text });
           if (awaitingClarification) {
-            processText(pendingTranscript, text);
+            const history = [...clarificationHistory, text];
+            setClarificationHistory(history);
+            processText(pendingTranscript, history.join("; "), clarificationRound);
           } else {
-            processText(text);
+            processText(text, undefined, 0);
           }
         } else {
           toast.warning("No speech detected.");
@@ -1480,26 +1656,36 @@ export default function Home() {
                   className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}
                 >
                   <div
-                    className={`max-w-[80%] rounded-2xl px-4 py-3 text-sm leading-relaxed ${
+                    className={`${msg.loggedMeal ? "max-w-[92%]" : "max-w-[80%]"} rounded-2xl px-4 py-3 text-sm leading-relaxed ${
                       msg.role === "user"
                         ? "bg-primary text-primary-foreground rounded-br-sm"
                         : "bg-card border border-border/60 text-foreground rounded-bl-sm"
-                    }`}
+                    } ${msg.loggedMeal ? "!p-0 overflow-hidden !bg-transparent !border-0" : ""}`}
                   >
-                    {msg.role === "ai" && msg.confidence && (
+                    {msg.role === "ai" && msg.confidence && !msg.loggedMeal && (
                       <div className="flex items-center gap-1.5 mb-1.5">
                         <BrainCircuit className="h-3.5 w-3.5 text-primary" />
                         <Badge variant="outline" className={`text-[9px] ${confidenceColor(msg.confidence)}`}>
                           {msg.confidence} confidence
                         </Badge>
-                        {msg.logSaved && <Badge variant="outline" className="text-[9px] border-emerald-300 text-emerald-700 bg-emerald-50">Saved</Badge>}
                       </div>
                     )}
-                    <p className="whitespace-pre-line">{msg.text}</p>
+                    {msg.imageDataUrl && (
+                      <img
+                        src={msg.imageDataUrl}
+                        alt="Uploaded meal"
+                        className="rounded-xl mb-2 max-h-48 w-auto object-cover"
+                      />
+                    )}
+                    {msg.loggedMeal ? (
+                      <LoggedMealCard meal={msg.loggedMeal} confidence={msg.confidence} />
+                    ) : (
+                      msg.text && <p className="whitespace-pre-line">{msg.text}</p>
+                    )}
                   </div>
                 </div>
               ))}
-              {isAnalyzing && (
+              {(isAnalyzing || isAnalyzingPhoto) && (
                 <div className="flex justify-start">
                   <div className="bg-card border border-border/60 rounded-2xl rounded-bl-sm px-4 py-3 flex items-center gap-2 text-xs text-muted-foreground">
                     <Loader2 className="h-3.5 w-3.5 animate-spin" /> Analyzing with USDA data...
@@ -1533,6 +1719,26 @@ export default function Home() {
 
             {/* Input bar */}
             <div className="flex gap-2 items-center border border-border/60 rounded-2xl bg-card px-3 py-2">
+              <input
+                ref={photoInputRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={e => {
+                  const file = e.target.files?.[0];
+                  if (file) handlePhotoSelected(file);
+                  e.target.value = "";
+                }}
+              />
+              <button
+                type="button"
+                onClick={() => photoInputRef.current?.click()}
+                disabled={isAnalyzing || isAnalyzingPhoto}
+                className="shrink-0 h-8 w-8 rounded-full flex items-center justify-center bg-primary/10 text-primary hover:bg-primary/20 transition-colors disabled:opacity-50"
+                title="Log from a photo"
+              >
+                <Camera className="h-4 w-4" />
+              </button>
               <button
                 type="button"
                 onClick={isRecording ? stopRecording : startRecording}
@@ -1551,12 +1757,12 @@ export default function Home() {
                 onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSendChat(); } }}
                 placeholder={awaitingClarification ? "Answer the question above..." : "What did you eat?"}
                 className="border-0 shadow-none focus-visible:ring-0 text-sm bg-transparent"
-                disabled={isAnalyzing}
+                disabled={isAnalyzing || isAnalyzingPhoto}
               />
               <Button
                 size="sm"
                 onClick={handleSendChat}
-                disabled={!chatInput.trim() || isAnalyzing}
+                disabled={!chatInput.trim() || isAnalyzing || isAnalyzingPhoto}
                 className="shrink-0 h-8 w-8 p-0 rounded-full"
               >
                 <Send className="h-4 w-4" />

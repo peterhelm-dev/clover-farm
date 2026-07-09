@@ -76,11 +76,13 @@ function writeToLogFile(source: LogSource, entries: unknown[]) {
 function vitePluginManusDebugCollector(): Plugin {
   return {
     name: "manus-debug-collector",
+    // Vite's own dev/build scoping — more reliable than checking NODE_ENV,
+    // which isn't guaranteed to be "production" during `vite build` on every
+    // CI/PaaS builder (it wasn't on Railway's, which is how this script tag
+    // ended up shipping to the production bundle in the first place).
+    apply: "serve",
 
     transformIndexHtml(html) {
-      if (process.env.NODE_ENV === "production") {
-        return html;
-      }
       return {
         html,
         tags: [
