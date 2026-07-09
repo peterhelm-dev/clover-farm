@@ -131,23 +131,26 @@ Respond ONLY with valid JSON, no markdown or extra text.`,
       if (!db) {
         throw new Error("Database not available");
       }
-      const result = await db.insert(foodLogs).values({
-        userId: ctx.user.id,
-        imageUrl: input.imageUrl,
-        foodName: input.foodDescription,
-        quantity: "1 serving",
-        calories: input.calories.toString(),
-        protein: input.protein.toString(),
-        carbs: input.carbs.toString(),
-        fat: input.fat.toString(),
-        fiber: input.fiber.toString(),
-        allergensDetected: input.allergens,
-        confidence: input.confidence,
-        notes: input.notes,
-      });
+      const result = await db
+        .insert(foodLogs)
+        .values({
+          userId: ctx.user.id,
+          imageUrl: input.imageUrl,
+          foodName: input.foodDescription,
+          quantity: "1 serving",
+          calories: input.calories.toString(),
+          protein: input.protein.toString(),
+          carbs: input.carbs.toString(),
+          fat: input.fat.toString(),
+          fiber: input.fiber.toString(),
+          allergensDetected: input.allergens,
+          confidence: input.confidence,
+          notes: input.notes,
+        })
+        .returning({ id: foodLogs.id });
 
       return {
-        id: result[0].insertId,
+        id: result[0].id,
         message: "Meal logged successfully from image",
       };
     }),

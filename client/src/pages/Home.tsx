@@ -786,7 +786,7 @@ export default function Home() {
             className="w-full h-11 gap-3"
           >
             <Leaf className="h-5 w-5" />
-            Sign in with Manus
+            Sign in with GitHub
           </Button>
           <p className="text-center text-xs text-muted-foreground">
             By continuing, you agree to Clover's curated wellness terms.

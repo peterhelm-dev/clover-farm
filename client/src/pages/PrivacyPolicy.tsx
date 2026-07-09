@@ -42,7 +42,7 @@ export default function PrivacyPolicy() {
             <h2 className="text-xl font-semibold text-gray-800 mb-3">2. Information We Collect</h2>
             <p className="text-gray-600 leading-relaxed mb-3">We collect information you provide directly to us, including:</p>
             <ul className="list-disc pl-6 space-y-2 text-gray-600">
-              <li><strong>Account information:</strong> name and email address provided through Manus OAuth authentication.</li>
+              <li><strong>Account information:</strong> name and email address provided through GitHub OAuth authentication.</li>
               <li><strong>Health and nutrition data:</strong> food logs, dietary preferences, allergies, health conditions, age, and weight that you voluntarily enter.</li>
               <li><strong>Voice input:</strong> audio recordings you submit for food logging are transcribed and immediately discarded; we do not store raw audio.</li>
               <li><strong>Feedback:</strong> any feedback, ratings, or messages you submit through the in-app feedback form.</li>

@@ -1,8 +1,8 @@
 import express, { Express, Request, Response } from "express";
-import Stripe from "stripe";
+import type Stripe from "stripe";
+import { getStripe } from "./stripe";
 import { updateSubscriptionTier } from "../db-subscriptions";
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || "");
 const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET || "";
 
 /**
@@ -25,7 +25,7 @@ export function registerStripeWebhook(app: Express) {
       let event: Stripe.Event;
 
       try {
-        event = stripe.webhooks.constructEvent(
+        event = getStripe().webhooks.constructEvent(
           req.body as Buffer,
           sig,
           webhookSecret

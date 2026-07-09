@@ -115,8 +115,10 @@ export async function upsertUserProfile(data: InsertUserProfile) {
     }
   }
 
+  updateSet.updatedAt = new Date();
+
   await db
     .insert(userProfiles)
     .values(data)
-    .onDuplicateKeyUpdate({ set: updateSet });
+    .onConflictDoUpdate({ target: userProfiles.userId, set: updateSet });
 }

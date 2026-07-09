@@ -1,14 +1,13 @@
 import { z } from "zod";
 import { protectedProcedure, router } from "../_core/trpc";
-import Stripe from "stripe";
+import type Stripe from "stripe";
+import { getStripe } from "../_core/stripe";
 import {
   getOrCreateSubscription,
   getSubscriptionByUserId,
   updateSubscriptionTier,
 } from "../db-subscriptions";
 import { PRODUCTS, getAICallLimit } from "../products";
-
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || "");
 
 export const billingRouter = router({
   /**
@@ -48,7 +47,7 @@ export const billingRouter = router({
         throw new Error("Cannot create checkout for free tier");
       }
 
-      const session = await stripe.checkout.sessions.create({
+      const session = await getStripe().checkout.sessions.create({
         payment_method_types: ["card"],
         mode: "subscription",
         customer_email: ctx.user.email || undefined,
@@ -97,7 +96,7 @@ export const billingRouter = router({
     }
 
     // Cancel the Stripe subscription
-    await stripe.subscriptions.cancel(sub.stripeSubscriptionId);
+    await getStripe().subscriptions.cancel(sub.stripeSubscriptionId);
 
     // Update local subscription to free tier
     await updateSubscriptionTier(ctx.user.id, "free");
@@ -118,7 +117,7 @@ export const billingRouter = router({
       return [];
     }
 
-    const invoices = await stripe.invoices.list({
+    const invoices = await getStripe().invoices.list({
       customer: sub.stripeCustomerId,
       limit: 12,
     });

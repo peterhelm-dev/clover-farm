@@ -1,54 +1,12 @@
 {
   "version": "7",
-  "dialect": "mysql",
+  "dialect": "postgresql",
   "entries": [
     {
       "idx": 0,
-      "version": "5",
-      "when": 1780087985850,
-      "tag": "0000_nosy_jocasta",
-      "breakpoints": true
-    },
-    {
-      "idx": 1,
-      "version": "5",
-      "when": 1780089610801,
-      "tag": "0001_complex_nitro",
-      "breakpoints": true
-    },
-    {
-      "idx": 2,
-      "version": "5",
-      "when": 1781884739517,
-      "tag": "0002_absurd_jack_power",
-      "breakpoints": true
-    },
-    {
-      "idx": 3,
-      "version": "5",
-      "when": 1782314766050,
-      "tag": "0003_friendly_raza",
-      "breakpoints": true
-    },
-    {
-      "idx": 4,
-      "version": "5",
-      "when": 1782417550395,
-      "tag": "0004_flowery_the_professor",
-      "breakpoints": true
-    },
-    {
-      "idx": 5,
-      "version": "5",
-      "when": 1782760125899,
-      "tag": "0005_fluffy_morph",
-      "breakpoints": true
-    },
-    {
-      "idx": 6,
-      "version": "5",
-      "when": 1783004282171,
-      "tag": "0006_right_ser_duncan",
+      "version": "7",
+      "when": 1783614670774,
+      "tag": "0000_nifty_the_professor",
       "breakpoints": true
     }
   ]

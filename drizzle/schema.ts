@@ -1,28 +1,51 @@
-import { bigint, decimal, int, json, mysqlEnum, mysqlTable, text, timestamp, varchar } from "drizzle-orm/mysql-core";
+import {
+  bigserial,
+  integer,
+  jsonb,
+  numeric,
+  pgEnum,
+  pgTable,
+  serial,
+  text,
+  timestamp,
+  varchar,
+} from "drizzle-orm/pg-core";
+
+export const roleEnum = pgEnum("role", ["user", "admin"]);
+export const confidenceEnum = pgEnum("confidence", ["high", "medium", "low"]);
+export const tierEnum = pgEnum("tier", ["free", "plus", "pro"]);
+export const referralStatusEnum = pgEnum("referral_status", ["pending", "credited"]);
+export const feedbackCategoryEnum = pgEnum("feedback_category", [
+  "general",
+  "bug",
+  "feature_request",
+  "ux",
+  "performance",
+]);
 
 /**
  * Core user table backing auth flow.
  * Extend this file with additional tables as your product grows.
  * Columns use camelCase to match both database fields and generated types.
  */
-export const users = mysqlTable("users", {
+export const users = pgTable("users", {
   /**
    * Surrogate primary key. Auto-incremented numeric value managed by the database.
    * Use this for relations between tables.
    */
-  id: int("id").autoincrement().primaryKey(),
-  /** Manus OAuth identifier (openId) returned from the OAuth callback. Unique per user. */
+  id: serial("id").primaryKey(),
+  /** Supabase Auth user id (uuid, from auth.users.id / JWT `sub` claim). Unique per user. */
   openId: varchar("openId", { length: 64 }).notNull().unique(),
   name: text("name"),
   email: varchar("email", { length: 320 }),
   loginMethod: varchar("loginMethod", { length: 64 }),
-  role: mysqlEnum("role", ["user", "admin"]).default("user").notNull(),
+  role: roleEnum("role").default("user").notNull(),
   /** Testers get unlimited AI calls and Pro features regardless of subscription tier */
-  isTester: int("isTester").default(0).notNull(), // 0=false, 1=true
+  isTester: integer("isTester").default(0).notNull(), // 0=false, 1=true
   /** Unique referral code for this user (generated on first login) */
   referralCode: varchar("referralCode", { length: 16 }).unique(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().notNull(),
   lastSignedIn: timestamp("lastSignedIn").defaultNow().notNull(),
 });
 
@@ -32,22 +55,22 @@ export type InsertUser = typeof users.$inferInsert;
 // ---------------------------------------------------------------------------
 // User health profiles (onboarding data)
 // ---------------------------------------------------------------------------
-export const userProfiles = mysqlTable("userProfiles", {
-  id: int("id").autoincrement().primaryKey(),
-  userId: int("userId").notNull().unique(),
-  age: int("age"),
-  weightLbs: decimal("weightLbs", { precision: 6, scale: 2 }),
-  allergies: json("allergies").$type<string[]>().default([]),
-  dietaryChoices: json("dietaryChoices").$type<string[]>().default([]),
-  healthConditions: json("healthConditions").$type<string[]>().default([]),
-  calorieTarget: int("calorieTarget").default(2000),
-  proteinTarget: int("proteinTarget").default(120),
-  carbsTarget: int("carbsTarget").default(200),
-  fatTarget: int("fatTarget").default(65),
-  fiberTarget: int("fiberTarget").default(28),
-  onboardingComplete: int("onboardingComplete").default(0), // 0=false, 1=true
+export const userProfiles = pgTable("userProfiles", {
+  id: serial("id").primaryKey(),
+  userId: integer("userId").notNull().unique(),
+  age: integer("age"),
+  weightLbs: numeric("weightLbs", { precision: 6, scale: 2 }),
+  allergies: jsonb("allergies").$type<string[]>().default([]),
+  dietaryChoices: jsonb("dietaryChoices").$type<string[]>().default([]),
+  healthConditions: jsonb("healthConditions").$type<string[]>().default([]),
+  calorieTarget: integer("calorieTarget").default(2000),
+  proteinTarget: integer("proteinTarget").default(120),
+  carbsTarget: integer("carbsTarget").default(200),
+  fatTarget: integer("fatTarget").default(65),
+  fiberTarget: integer("fiberTarget").default(28),
+  onboardingComplete: integer("onboardingComplete").default(0), // 0=false, 1=true
   createdAt: timestamp("createdAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().notNull(),
 });
 
 export type UserProfile = typeof userProfiles.$inferSelect;
@@ -56,20 +79,20 @@ export type InsertUserProfile = typeof userProfiles.$inferInsert;
 // ---------------------------------------------------------------------------
 // Food logs (one row per AI-analyzed meal entry)
 // ---------------------------------------------------------------------------
-export const foodLogs = mysqlTable("foodLogs", {
-  id: bigint("id", { mode: "number" }).autoincrement().primaryKey(),
-  userId: int("userId").notNull(),
+export const foodLogs = pgTable("foodLogs", {
+  id: bigserial("id", { mode: "number" }).primaryKey(),
+  userId: integer("userId").notNull(),
   rawSpeech: text("rawSpeech"),
-  imageUrl: text("imageUrl"), // S3 URL if logged from image
+  imageUrl: text("imageUrl"), // Supabase Storage URL if logged from image
   foodName: varchar("foodName", { length: 255 }).notNull(),
   quantity: varchar("quantity", { length: 255 }),
-  calories: decimal("calories", { precision: 8, scale: 2 }).default("0"),
-  protein: decimal("protein", { precision: 8, scale: 2 }).default("0"),
-  carbs: decimal("carbs", { precision: 8, scale: 2 }).default("0"),
-  fat: decimal("fat", { precision: 8, scale: 2 }).default("0"),
-  fiber: decimal("fiber", { precision: 8, scale: 2 }).default("0"),
-  allergensDetected: json("allergensDetected").$type<string[]>().default([]),
-  confidence: mysqlEnum("confidence", ["high", "medium", "low"]).default("medium"),
+  calories: numeric("calories", { precision: 8, scale: 2 }).default("0"),
+  protein: numeric("protein", { precision: 8, scale: 2 }).default("0"),
+  carbs: numeric("carbs", { precision: 8, scale: 2 }).default("0"),
+  fat: numeric("fat", { precision: 8, scale: 2 }).default("0"),
+  fiber: numeric("fiber", { precision: 8, scale: 2 }).default("0"),
+  allergensDetected: jsonb("allergensDetected").$type<string[]>().default([]),
+  confidence: confidenceEnum("confidence").default("medium"),
   notes: text("notes"),
   loggedAt: timestamp("loggedAt").defaultNow().notNull(),
 });
@@ -80,21 +103,21 @@ export type InsertFoodLog = typeof foodLogs.$inferInsert;
 // ---------------------------------------------------------------------------
 // Subscriptions (Stripe billing)
 // ---------------------------------------------------------------------------
-export const subscriptions = mysqlTable("subscriptions", {
-  id: int("id").autoincrement().primaryKey(),
-  userId: int("userId").notNull().unique(),
-  tier: mysqlEnum("tier", ["free", "plus", "pro"]).default("free").notNull(),
+export const subscriptions = pgTable("subscriptions", {
+  id: serial("id").primaryKey(),
+  userId: integer("userId").notNull().unique(),
+  tier: tierEnum("tier").default("free").notNull(),
   stripeCustomerId: varchar("stripeCustomerId", { length: 128 }),
   stripeSubscriptionId: varchar("stripeSubscriptionId", { length: 128 }),
-  aiCallsUsedThisMonth: int("aiCallsUsedThisMonth").default(0).notNull(),
+  aiCallsUsedThisMonth: integer("aiCallsUsedThisMonth").default(0).notNull(),
   periodStart: timestamp("periodStart").defaultNow().notNull(),
   /** Trial support: Plus trial auto-started on first login */
   trialEndsAt: timestamp("trialEndsAt"),
-  trialUsed: int("trialUsed").default(0).notNull(), // 0=never used, 1=used
+  trialUsed: integer("trialUsed").default(0).notNull(), // 0=never used, 1=used
   /** Free months credited from referrals (each = 1 month of Pro) */
-  freeMonthsRemaining: int("freeMonthsRemaining").default(0).notNull(),
+  freeMonthsRemaining: integer("freeMonthsRemaining").default(0).notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().notNull(),
 });
 
 export type Subscription = typeof subscriptions.$inferSelect;
@@ -103,8 +126,8 @@ export type InsertSubscription = typeof subscriptions.$inferInsert;
 // ---------------------------------------------------------------------------
 // Waitlist (pre-launch email capture)
 // ---------------------------------------------------------------------------
-export const waitlist = mysqlTable("waitlist", {
-  id: int("id").autoincrement().primaryKey(),
+export const waitlist = pgTable("waitlist", {
+  id: serial("id").primaryKey(),
   email: varchar("email", { length: 320 }).notNull().unique(),
   source: varchar("source", { length: 64 }).default("landing_hero").notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
@@ -116,16 +139,16 @@ export type InsertWaitlist = typeof waitlist.$inferInsert;
 // ---------------------------------------------------------------------------
 // Referrals (one row per successful referred signup)
 // ---------------------------------------------------------------------------
-export const referrals = mysqlTable("referrals", {
-  id: int("id").autoincrement().primaryKey(),
+export const referrals = pgTable("referrals", {
+  id: serial("id").primaryKey(),
   /** The user who shared their referral code */
-  referrerId: int("referrerId").notNull(),
+  referrerId: integer("referrerId").notNull(),
   /** The new user who signed up using the code */
-  referredUserId: int("referredUserId").notNull().unique(),
+  referredUserId: integer("referredUserId").notNull().unique(),
   /** The referral code that was used */
   code: varchar("code", { length: 16 }).notNull(),
   /** Whether the free month has been credited to the referrer */
-  status: mysqlEnum("status", ["pending", "credited"]).default("pending").notNull(),
+  status: referralStatusEnum("status").default("pending").notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
 
@@ -135,14 +158,14 @@ export type InsertReferral = typeof referrals.$inferInsert;
 // ---------------------------------------------------------------------------
 // Beta Invites (admin-generated single-use invite links)
 // ---------------------------------------------------------------------------
-export const betaInvites = mysqlTable("betaInvites", {
-  id: int("id").autoincrement().primaryKey(),
+export const betaInvites = pgTable("betaInvites", {
+  id: serial("id").primaryKey(),
   /** Unique token used in the invite URL: /beta/:code */
   code: varchar("code", { length: 32 }).notNull().unique(),
   /** Admin user who created this invite */
-  createdBy: int("createdBy").notNull(),
+  createdBy: integer("createdBy").notNull(),
   /** User who redeemed this invite (null until redeemed) */
-  redeemedBy: int("redeemedBy"),
+  redeemedBy: integer("redeemedBy"),
   redeemedAt: timestamp("redeemedAt"),
   /** Optional label/note for the invite (e.g. "For Alice - beta group 1") */
   note: varchar("note", { length: 255 }),
@@ -157,13 +180,13 @@ export type InsertBetaInvite = typeof betaInvites.$inferInsert;
 // ---------------------------------------------------------------------------
 // Beta Feedback (submitted by beta testers via the in-app feedback form)
 // ---------------------------------------------------------------------------
-export const betaFeedback = mysqlTable("betaFeedback", {
-  id: int("id").autoincrement().primaryKey(),
-  userId: int("userId").notNull(),
+export const betaFeedback = pgTable("betaFeedback", {
+  id: serial("id").primaryKey(),
+  userId: integer("userId").notNull(),
   /** 1–5 star rating */
-  rating: int("rating").notNull(),
+  rating: integer("rating").notNull(),
   /** Category of feedback */
-  category: mysqlEnum("category", ["general", "bug", "feature_request", "ux", "performance"]).default("general").notNull(),
+  category: feedbackCategoryEnum("category").default("general").notNull(),
   /** Free-text feedback message */
   message: text("message").notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
@@ -175,11 +198,11 @@ export type InsertBetaFeedback = typeof betaFeedback.$inferInsert;
 // ---------------------------------------------------------------------------
 // App Settings (admin-configurable app-wide settings)
 // ---------------------------------------------------------------------------
-export const appSettings = mysqlTable("appSettings", {
-  id: int("id").autoincrement().primaryKey(),
+export const appSettings = pgTable("appSettings", {
+  id: serial("id").primaryKey(),
   /** If true, only users with valid beta invites can sign up */
-  inviteOnly: int("inviteOnly").default(0).notNull(), // 0=false, 1=true
-  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  inviteOnly: integer("inviteOnly").default(0).notNull(), // 0=false, 1=true
+  updatedAt: timestamp("updatedAt").defaultNow().notNull(),
 });
 
 export type AppSettings = typeof appSettings.$inferSelect;
@@ -188,15 +211,15 @@ export type InsertAppSettings = typeof appSettings.$inferInsert;
 // ---------------------------------------------------------------------------
 // Water Intake Tracking (daily water consumption logging)
 // ---------------------------------------------------------------------------
-export const waterIntake = mysqlTable("waterIntake", {
-  id: int("id").autoincrement().primaryKey(),
-  userId: int("userId").notNull(),
+export const waterIntake = pgTable("waterIntake", {
+  id: serial("id").primaryKey(),
+  userId: integer("userId").notNull(),
   /** Date for this water log (YYYY-MM-DD) */
   date: varchar("date", { length: 10 }).notNull(),
   /** Amount of water logged in milliliters */
-  amount: int("amount").notNull(), // in ml
+  amount: integer("amount").notNull(), // in ml
   /** Daily water goal in milliliters (default 2000ml) */
-  goal: int("goal").default(2000).notNull(),
+  goal: integer("goal").default(2000).notNull(),
   timestamp: timestamp("timestamp").defaultNow().notNull(),
 });
 
@@ -206,13 +229,13 @@ export type InsertWaterIntake = typeof waterIntake.$inferInsert;
 // ---------------------------------------------------------------------------
 // Meal Plans (weekly meal planning suggestions)
 // ---------------------------------------------------------------------------
-export const mealPlans = mysqlTable("mealPlans", {
-  id: int("id").autoincrement().primaryKey(),
-  userId: int("userId").notNull(),
+export const mealPlans = pgTable("mealPlans", {
+  id: serial("id").primaryKey(),
+  userId: integer("userId").notNull(),
   /** Start date of the week (YYYY-MM-DD) */
   weekStart: varchar("weekStart", { length: 10 }).notNull(),
   /** JSON array of meal suggestions for the week */
-  meals: json("meals").$type<Array<{
+  meals: jsonb("meals").$type<Array<{
     day: string;
     breakfast: string;
     lunch: string;
@@ -220,7 +243,7 @@ export const mealPlans = mysqlTable("mealPlans", {
     snack?: string;
   }>>().default([]),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().notNull(),
 });
 
 export type MealPlan = typeof mealPlans.$inferSelect;
