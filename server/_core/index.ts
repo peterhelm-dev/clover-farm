@@ -58,6 +58,11 @@ async function startServer() {
   initSentry();
 
   const app = express();
+  // Railway (and most PaaS hosts) put the app behind a reverse proxy that
+  // sets X-Forwarded-For. Without this, express-rate-limit refuses to trust
+  // that header (correctly, as a spoofing precaution) and throws on every
+  // request instead of rate-limiting by real client IP.
+  app.set("trust proxy", 1);
   const server = createServer(app);
 
   // Register Stripe webhook BEFORE express.json() middleware
