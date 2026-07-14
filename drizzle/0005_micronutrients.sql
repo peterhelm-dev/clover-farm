@@ -1,0 +1,1 @@
+ALTER TABLE "foodLogs" ADD COLUMN "micronutrients" jsonb;

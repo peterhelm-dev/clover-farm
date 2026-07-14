@@ -10,6 +10,49 @@ import {
   getUserProfile,
   upsertUserProfile,
 } from "../db-food-logs";
+import { MICRONUTRIENT_KEYS } from "./nutrition";
+
+/**
+ * General adult reference ranges — informational context only, NOT personal
+ * targets or medical guidance. `upperLimit` marks nutrients where the concern
+ * is exceeding, not reaching (sodium).
+ */
+export const NUTRIENT_REFERENCES: Record<
+  (typeof MICRONUTRIENT_KEYS)[number],
+  { label: string; unit: string; low: number; high: number; upperLimit?: boolean }
+> = {
+  iron_mg: { label: "Iron", unit: "mg", low: 8, high: 18 },
+  magnesium_mg: { label: "Magnesium", unit: "mg", low: 310, high: 420 },
+  vitamin_b12_mcg: { label: "Vitamin B12", unit: "mcg", low: 2.4, high: 2.8 },
+  vitamin_d_mcg: { label: "Vitamin D", unit: "mcg", low: 15, high: 20 },
+  potassium_mg: { label: "Potassium", unit: "mg", low: 2600, high: 3400 },
+  calcium_mg: { label: "Calcium", unit: "mg", low: 1000, high: 1200 },
+  zinc_mg: { label: "Zinc", unit: "mg", low: 8, high: 11 },
+  sodium_mg: { label: "Sodium", unit: "mg", low: 0, high: 2300, upperLimit: true },
+};
+
+/**
+ * Rough meal-period anchor hours (UTC, matching the app's existing UTC-day
+ * convention). "This morning" shouldn't require the user to state a clock
+ * time — breakfast lands ~8:00, lunch ~12:30, dinner ~18:30, snack ~15:30.
+ */
+const MEAL_PERIOD_HOURS: Record<string, { h: number; m: number }> = {
+  breakfast: { h: 8, m: 0 },
+  lunch: { h: 12, m: 30 },
+  snack: { h: 15, m: 30 },
+  dinner: { h: 18, m: 30 },
+};
+
+function resolveLoggedAt(mealPeriod: string | null | undefined, dayOffset: number | undefined): Date | undefined {
+  if (!mealPeriod && !dayOffset) return undefined; // no time context → server now()
+  const base = new Date();
+  if (dayOffset) base.setUTCDate(base.getUTCDate() + dayOffset);
+  const anchor = mealPeriod ? MEAL_PERIOD_HOURS[mealPeriod] : undefined;
+  if (anchor) {
+    base.setUTCHours(anchor.h, anchor.m, 0, 0);
+  }
+  return base;
+}
 
 export const foodLogsRouter = router({
   // -------------------------------------------------------------------------
@@ -27,15 +70,24 @@ export const foodLogsRouter = router({
         fat: z.number().min(0).default(0),
         fiber: z.number().min(0).default(0),
         allergensDetected: z.array(z.string()).default([]),
+        /** Rough AI-estimated micronutrients for the meal. */
+        micronutrients: z.record(z.string(), z.number()).optional(),
         confidence: z.enum(["high", "medium", "low"]).default("medium"),
         notes: z.string().optional(),
+        /** How the entry was captured; feeds the voice-vs-photo secondary metric. */
+        logMethod: z.enum(["voice", "text"]).optional(),
+        /** Rough time-of-day placement inferred from the description. */
+        mealPeriod: z.enum(["breakfast", "lunch", "dinner", "snack"]).nullish(),
+        /** 0 = today, -1 = yesterday ("last night", "yesterday for lunch"). */
+        dayOffset: z.number().int().min(-1).max(0).optional(),
       })
     )
     .mutation(async ({ ctx, input }) => {
       try {
-        await createFoodLog({
+        const id = await createFoodLog({
           userId: ctx.user.id,
           rawSpeech: input.rawSpeech,
+          logMethod: input.logMethod,
           foodName: input.foodName,
           quantity: input.quantity,
           calories: String(input.calories),
@@ -44,10 +96,12 @@ export const foodLogsRouter = router({
           fat: String(input.fat),
           fiber: String(input.fiber),
           allergensDetected: input.allergensDetected,
+          micronutrients: input.micronutrients,
           confidence: input.confidence,
           notes: input.notes,
+          loggedAt: resolveLoggedAt(input.mealPeriod, input.dayOffset),
         });
-        return { success: true };
+        return { success: true, id };
       } catch (err) {
         throw new TRPCError({
           code: "INTERNAL_SERVER_ERROR",
@@ -82,6 +136,73 @@ export const foodLogsRouter = router({
     const rows = await getAllFoodLogs(ctx.user.id);
     return rows.map(normalizeLog);
   }),
+
+  // -------------------------------------------------------------------------
+  // Micronutrient summary: per-nutrient average per logged day over the
+  // trailing window. Averages only cover days that actually have logs with
+  // micro data — missing days are absent, never counted as zeros.
+  // -------------------------------------------------------------------------
+  nutrientSummary: protectedProcedure
+    .input(z.object({ days: z.union([z.literal(7), z.literal(30)]).default(7) }))
+    .query(async ({ ctx, input }) => {
+      const endMs = Date.now();
+      const startMs = endMs - input.days * 24 * 60 * 60 * 1000;
+      const rows = await getFoodLogsByDateRange(ctx.user.id, startMs, endMs);
+
+      const allDays = new Set<string>();
+      // Per-day sums, only over logs that carry micronutrient estimates
+      const daySums = new Map<string, Record<string, number>>();
+      let logsWithMicros = 0;
+
+      for (const row of rows) {
+        const day = (row.loggedAt instanceof Date ? row.loggedAt : new Date(Number(row.loggedAt)))
+          .toISOString()
+          .slice(0, 10);
+        allDays.add(day);
+        const micros = row.micronutrients as Record<string, number> | null;
+        if (!micros) continue;
+        logsWithMicros++;
+        const acc = daySums.get(day) ?? {};
+        for (const key of MICRONUTRIENT_KEYS) {
+          const v = Number(micros[key] ?? 0);
+          if (!Number.isNaN(v)) acc[key] = (acc[key] ?? 0) + v;
+        }
+        daySums.set(day, acc);
+      }
+
+      const daysWithData = daySums.size;
+      const nutrients = MICRONUTRIENT_KEYS.map(key => {
+        const ref = NUTRIENT_REFERENCES[key];
+        let avg: number | null = null;
+        if (daysWithData > 0) {
+          let total = 0;
+          for (const sums of Array.from(daySums.values())) total += sums[key] ?? 0;
+          avg = Math.round((total / daysWithData) * 10) / 10;
+        }
+        const status: "below" | "within" | "above" | "unknown" =
+          avg == null
+            ? "unknown"
+            : ref.upperLimit
+              ? avg > ref.high
+                ? "above"
+                : "within"
+              : avg < ref.low
+                ? "below"
+                : avg > ref.high
+                  ? "above"
+                  : "within";
+        return { key, ...ref, avgPerDay: avg, status };
+      });
+
+      return {
+        windowDays: input.days,
+        daysLogged: allDays.size,
+        daysWithData,
+        totalLogs: rows.length,
+        logsWithMicros,
+        nutrients,
+      };
+    }),
 
   // -------------------------------------------------------------------------
   // Delete a food log entry (owner-only)

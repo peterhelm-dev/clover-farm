@@ -136,6 +136,7 @@ Respond ONLY with valid JSON, no markdown or extra text.`,
         .values({
           userId: ctx.user.id,
           imageUrl: input.imageUrl,
+          logMethod: "photo",
           foodName: input.foodDescription,
           quantity: "1 serving",
           calories: input.calories.toString(),

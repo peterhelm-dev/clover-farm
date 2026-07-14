@@ -4,8 +4,8 @@ import { ImageMealLogger } from "@/components/ImageMealLogger";
 import { WaterIntakeCard } from "@/components/WaterIntakeCard";
 import { MealPlanningTab } from "@/components/MealPlanningTab";
 import { useAuth } from "@/_core/hooks/useAuth";
-import { useDashboardTab } from "@/contexts/DashboardTabContext";
 import { trpc } from "@/lib/trpc";
+import { FEATURE_FLAGS } from "@/lib/featureFlags";
 import { getLoginUrl } from "@/const";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -34,7 +34,9 @@ import { MOCK_TRAVEL_CALENDAR } from "@shared/const";
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
-type LoggedMealSummary = {
+type LoggedMealEntry = {
+  /** DB id of the saved log — enables in-chat undo. */
+  logId: number;
   foodName: string;
   calories: number;
   protein: number;
@@ -42,7 +44,9 @@ type LoggedMealSummary = {
   fat: number;
   fiber: number;
   allergens: string[];
-  notes?: string | null;
+  mealPeriod: "breakfast" | "lunch" | "dinner" | "snack" | null;
+  dayOffset: number;
+  undone?: boolean;
 };
 
 type ChatMessage = {
@@ -52,12 +56,22 @@ type ChatMessage = {
   confidence?: "high" | "medium" | "low";
   logSaved?: boolean;
   imageDataUrl?: string;
-  loggedMeal?: LoggedMealSummary;
+  loggedMeals?: LoggedMealEntry[];
+  notes?: string | null;
 };
 
-type OnboardStep = "age" | "weight" | "diet" | "allergies" | "conditions" | "referral" | "done";
+// Golden-path onboarding (spec Part 1): Welcome → Goal → First log → Notification preference.
+// Health-profile details (age, weight, allergies, etc.) moved to Settings.
+type OnboardStep = "welcome" | "goal" | "first-log" | "notifications" | "done";
 
-const ONBOARD_STEPS: OnboardStep[] = ["age", "weight", "diet", "allergies", "conditions", "referral", "done"];
+const ONBOARD_STEPS: OnboardStep[] = ["welcome", "goal", "first-log", "notifications", "done"];
+
+/** Goals selectable in the UI — only goals whose weekly-export template copy exists. */
+const GOAL_OPTIONS: { value: "weight_management" | "protein_focus" | "general_awareness"; label: string; description: string }[] = [
+  { value: "weight_management", label: "Weight management", description: "Gentle awareness of overall intake patterns" },
+  { value: "protein_focus", label: "Protein focus", description: "Keep an eye on protein across your week" },
+  { value: "general_awareness", label: "Just general awareness", description: "No specific target — understand your patterns" },
+];
 
 const DIET_OPTIONS = ["Balanced", "Vegetarian", "Vegan", "Keto", "Paleo", "High Protein", "Low Carb"];
 const ALLERGEN_OPTIONS = ["Peanuts", "Tree Nuts", "Gluten", "Dairy", "Soy", "Shellfish", "Eggs"];
@@ -80,14 +94,19 @@ function confidenceColor(c: "high" | "medium" | "low") {
 }
 
 // ---------------------------------------------------------------------------
-// LoggedMealCard sub-component — the polished "meal saved" confirmation
+// LoggedMealCard sub-component — the polished "meal saved" confirmation,
+// with in-chat undo and rough time-of-day placement.
 // ---------------------------------------------------------------------------
 function LoggedMealCard({
   meal,
   confidence,
+  onUndo,
+  undoing,
 }: {
-  meal: LoggedMealSummary;
+  meal: LoggedMealEntry;
   confidence?: "high" | "medium" | "low";
+  onUndo?: () => void;
+  undoing?: boolean;
 }) {
   const macros = [
     { label: "Calories", value: `${Math.round(meal.calories)} kcal` },
@@ -97,6 +116,21 @@ function LoggedMealCard({
     { label: "Fiber", value: `${Math.round(meal.fiber)}g` },
   ];
 
+  const whenLabel = meal.mealPeriod
+    ? `${meal.mealPeriod}${meal.dayOffset === -1 ? " · yesterday" : ""}`
+    : meal.dayOffset === -1
+      ? "yesterday"
+      : null;
+
+  if (meal.undone) {
+    return (
+      <div className="rounded-2xl border border-border/60 bg-muted/30 px-4 py-3">
+        <p className="text-xs text-muted-foreground line-through">{meal.foodName}</p>
+        <p className="text-xs text-muted-foreground mt-0.5">Removed from your log.</p>
+      </div>
+    );
+  }
+
   return (
     <div className="rounded-2xl border border-emerald-200 bg-emerald-50/60 overflow-hidden">
       <div className="flex items-center gap-2 px-4 pt-3">
@@ -104,6 +138,11 @@ function LoggedMealCard({
           <Check className="h-3 w-3 text-white" />
         </div>
         <span className="text-sm font-semibold text-emerald-800">Logged</span>
+        {whenLabel && (
+          <Badge variant="outline" className="text-[9px] border-emerald-300 text-emerald-700 bg-white capitalize">
+            {whenLabel}
+          </Badge>
+        )}
         {confidence && (
           <Badge variant="outline" className={`text-[9px] ml-auto ${confidenceColor(confidence)}`}>
             {confidence} confidence
@@ -124,20 +163,123 @@ function LoggedMealCard({
         ))}
       </div>
 
-      {(meal.notes || meal.allergens.length > 0) && (
-        <div className="px-4 py-3 space-y-2">
-          {meal.notes && (
-            <p className="text-xs text-muted-foreground italic">{meal.notes}</p>
-          )}
+      {(meal.allergens.length > 0 || onUndo) && (
+        <div className="px-4 py-2.5 space-y-2">
           {meal.allergens.length > 0 && (
             <div className="flex items-start gap-1.5 text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-1.5">
               <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
               <span>Allergens detected: {meal.allergens.join(", ")}</span>
             </div>
           )}
+          {onUndo && (
+            <button
+              type="button"
+              onClick={onUndo}
+              disabled={undoing}
+              className="text-[11px] text-muted-foreground hover:text-destructive underline underline-offset-2 transition-colors disabled:opacity-50"
+            >
+              {undoing ? "Removing..." : "Undo — remove this log"}
+            </button>
+          )}
         </div>
       )}
     </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// NutrientPanel sub-component — micronutrient averages across categories.
+// Informational framing only: typical adult ranges, clearly labeled as rough
+// AI estimates. Not targets, not a report card, never medical guidance.
+// ---------------------------------------------------------------------------
+function NutrientPanel() {
+  const [windowDays, setWindowDays] = useState<7 | 30>(7);
+  const summaryQuery = trpc.foodLogs.nutrientSummary.useQuery({ days: windowDays });
+  const data = summaryQuery.data;
+
+  const statusStyle = (status: string) =>
+    status === "within"
+      ? "bg-emerald-500"
+      : status === "unknown"
+        ? "bg-muted-foreground/30"
+        : "bg-amber-400";
+
+  const statusLabel = (status: string, upperLimit?: boolean) =>
+    status === "within"
+      ? "in typical range"
+      : status === "below"
+        ? "below typical range"
+        : status === "above"
+          ? upperLimit
+            ? "above advisory limit"
+            : "above typical range"
+          : "no data yet";
+
+  return (
+    <Card className="border-border/60">
+      <CardHeader className="p-5 border-b border-border/40">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <CardTitle className="font-serif text-base font-bold">Nutrients</CardTitle>
+            <CardDescription className="text-xs mt-0.5">
+              Rough AI estimates from your logged meals — averaged over the days you logged, not a lab result.
+            </CardDescription>
+          </div>
+          <div className="flex gap-1 shrink-0">
+            {([7, 30] as const).map(d => (
+              <Button
+                key={d}
+                variant={windowDays === d ? "secondary" : "ghost"}
+                size="sm"
+                className="h-7 px-2.5 text-xs"
+                onClick={() => setWindowDays(d)}
+              >
+                {d}d
+              </Button>
+            ))}
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent className="p-5">
+        {summaryQuery.isLoading ? (
+          <div className="flex items-center gap-2 text-xs text-muted-foreground py-4">
+            <Loader2 className="h-4 w-4 animate-spin" /> Crunching your nutrients...
+          </div>
+        ) : !data || data.daysWithData === 0 ? (
+          <p className="text-xs text-muted-foreground py-2">
+            No nutrient estimates yet — they're captured automatically with each new meal you log, so this fills in as you go.
+          </p>
+        ) : (
+          <div className="space-y-3">
+            <div className="grid sm:grid-cols-2 gap-x-6 gap-y-2.5">
+              {data.nutrients.map(n => (
+                <div key={n.key} className="flex items-center justify-between gap-3 text-sm">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className={`h-2 w-2 rounded-full shrink-0 ${statusStyle(n.status)}`} />
+                    <span className="font-medium truncate">{n.label}</span>
+                  </div>
+                  <div className="text-right shrink-0">
+                    <span className="font-mono text-xs">
+                      {n.avgPerDay != null ? `${n.avgPerDay}${n.unit}/day` : "—"}
+                    </span>
+                    <span className="block text-[10px] text-muted-foreground">
+                      {statusLabel(n.status, n.upperLimit)}
+                      {n.status !== "unknown" && !n.upperLimit && ` · typical ${n.low}–${n.high}${n.unit}`}
+                      {n.status !== "unknown" && n.upperLimit && ` · advisory limit ${n.high}${n.unit}`}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <p className="text-[10px] text-muted-foreground pt-1 border-t border-border/30 leading-relaxed">
+              Based on {data.daysWithData} {data.daysWithData === 1 ? "day" : "days"} with nutrient data
+              (of {data.daysLogged} logged in the last {data.windowDays}). Intake isn't the same as absorption —
+              if you're chasing a symptom like fatigue, treat this as a conversation starter for a doctor, not an answer.
+            </p>
+          </div>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 
@@ -499,19 +641,98 @@ export default function Home() {
   });
 
   // ---- UI state ----
-  const [activeTab, setActiveTab] = useState<"dashboard" | "voice-logger" | "calendar" | "recipes" | "mealplan" | "travel" | "integrations" | "billing">("dashboard");
+  const [activeTab, setActiveTab] = useState<"home" | "dashboard" | "voice-logger" | "calendar" | "weekly-report" | "settings" | "recipes" | "mealplan" | "travel" | "integrations" | "billing">("home");
+  // Beta-Gated tabs must be unreachable, not just unlinked — if state ever
+  // points at one while its flag is off, bounce back to the dashboard.
+  useEffect(() => {
+    if (
+      (activeTab === "travel" && !FEATURE_FLAGS.travelSourcing) ||
+      (activeTab === "integrations" && !FEATURE_FLAGS.integrations)
+    ) {
+      setActiveTab("dashboard");
+    }
+  }, [activeTab]);
   const [editingLogId, setEditingLogId] = useState<number | null>(null);
   const [editForm, setEditForm] = useState<{ foodName: string; quantity: string; calories: string; protein: string; carbs: string; fat: string; fiber: string }>({ foodName: "", quantity: "", calories: "", protein: "", carbs: "", fat: "", fiber: "" });
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
 
-  // ---- onboarding wizard ----
-  const [onboardStep, setOnboardStep] = useState<OnboardStep>("age");
-  const [onboardAge, setOnboardAge] = useState("");
-  const [onboardWeight, setOnboardWeight] = useState("");
-  const [onboardDiet, setOnboardDiet] = useState<string[]>([]);
-  const [onboardAllergies, setOnboardAllergies] = useState<string[]>([]);
-  const [onboardConditions, setOnboardConditions] = useState<string[]>([]);
-  const [onboardReferralCode, setOnboardReferralCode] = useState("");
+  // ---- onboarding wizard (golden path: Welcome → Goal → First log → Notifications) ----
+  const [onboardStep, setOnboardStep] = useState<OnboardStep>("welcome");
+  const onboardStartedAtRef = useRef<number | null>(null);
+  const [onboardGoal, setOnboardGoal] = useState<(typeof GOAL_OPTIONS)[number]["value"] | null>(null);
+  const [onboardFirstLogDone, setOnboardFirstLogDone] = useState(false);
+  const [onboardLogText, setOnboardLogText] = useState("");
+  const [onboardLogBusy, setOnboardLogBusy] = useState(false);
+  const [onboardRecording, setOnboardRecording] = useState(false);
+  const [onboardLogWasVoice, setOnboardLogWasVoice] = useState(false);
+  const [onboardReminderChoice, setOnboardReminderChoice] = useState<"reminder" | "none" | null>(null);
+  const [onboardReminderTime, setOnboardReminderTime] = useState("18:00");
+  const onboardPhotoInputRef = useRef<HTMLInputElement>(null);
+
+  // ---- instrumentation (fire-and-forget; must never disturb the UX) ----
+  const trackEventMutation = trpc.events.track.useMutation();
+  const trackEvent = useCallback(
+    (eventName: Parameters<typeof trackEventMutation.mutate>[0]["eventName"], properties: Record<string, unknown> = {}) => {
+      trackEventMutation.mutate({ eventName, properties }, { onError: () => {} });
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    []
+  );
+  // Batch-logging signal: how many meals landed in one visit to the logger.
+  const logSessionCountRef = useRef(0);
+
+  // ---- settings (goal / reminder / export email — spec Part 3) ----
+  const settingsQuery = trpc.settings.get.useQuery(undefined, { enabled: isAuthenticated });
+  const setGoalMutation = trpc.settings.setGoal.useMutation({
+    onSuccess: () => settingsQuery.refetch(),
+  });
+  const setReminderMutation = trpc.settings.setReminder.useMutation({
+    onSuccess: () => settingsQuery.refetch(),
+  });
+  const setExportEmailMutation = trpc.settings.setWeeklyExportEmail.useMutation({
+    onSuccess: () => settingsQuery.refetch(),
+  });
+
+  // ---- health profile editing (moved out of onboarding into Settings) ----
+  const [settingsAge, setSettingsAge] = useState("");
+  const [settingsWeight, setSettingsWeight] = useState("");
+  const [settingsAllergies, setSettingsAllergies] = useState<string[]>([]);
+  const [settingsDiet, setSettingsDiet] = useState<string[]>([]);
+  const [settingsProfileLoaded, setSettingsProfileLoaded] = useState(false);
+  useEffect(() => {
+    if (settingsProfileLoaded || !profileQuery.data) return;
+    const p = profileQuery.data;
+    setSettingsAge(p.age != null ? String(p.age) : "");
+    setSettingsWeight(p.weightLbs != null ? String(p.weightLbs) : "");
+    setSettingsAllergies(p.allergies ?? []);
+    setSettingsDiet(p.dietaryChoices ?? []);
+    setSettingsProfileLoaded(true);
+  }, [profileQuery.data, settingsProfileLoaded]);
+
+  // ---- weekly report ----
+  const weeklyReportQuery = trpc.weeklyExport.getReport.useQuery(undefined, { enabled: isAuthenticated });
+  const [reportLastSeen, setReportLastSeen] = useState<number>(() =>
+    Number(localStorage.getItem("clover-weekly-report-last-seen") ?? 0)
+  );
+  const weeklyReport = weeklyReportQuery.data;
+  const weeklyReportReady = !!(
+    weeklyReport && "periodEnd" in weeklyReport && weeklyReport.periodEnd > reportLastSeen
+  );
+  const reportViewTrackedRef = useRef(false);
+  useEffect(() => {
+    if (activeTab !== "weekly-report") {
+      reportViewTrackedRef.current = false;
+      return;
+    }
+    if (weeklyReport && "periodEnd" in weeklyReport) {
+      localStorage.setItem("clover-weekly-report-last-seen", String(weeklyReport.periodEnd));
+      setReportLastSeen(weeklyReport.periodEnd);
+      if (!reportViewTrackedRef.current) {
+        reportViewTrackedRef.current = true;
+        trackEvent("weekly_export_viewed", { channel: "in_app" });
+      }
+    }
+  }, [activeTab, weeklyReport, trackEvent]);
 
   // ---- voice logger chat ----
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
@@ -528,6 +749,17 @@ export default function Home() {
   const recognitionRef = useRef<any>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const photoInputRef = useRef<HTMLInputElement>(null);
+  // Distinguishes spoken vs typed entries for logMethod (voice-vs-photo metric).
+  // Set when speech recognition produces text; cleared the moment the user types.
+  const chatInputWasVoiceRef = useRef(false);
+  // Method of the entry currently awaiting clarification, so a typed answer
+  // to a clarifying question doesn't reclassify a voice log as text.
+  const pendingMethodRef = useRef<"voice" | "text">("text");
+  // Generation counter for cancelling in-flight analysis: Stop bumps the
+  // counter and any pending async work sees the mismatch and discards itself.
+  const analysisGenRef = useRef(0);
+  // Log ids currently being undone (per-card spinner state).
+  const [undoingLogIds, setUndoingLogIds] = useState<number[]>([]);
 
   // ---- calendar ----
   const [calendarDate, setCalendarDate] = useState(() => new Date());
@@ -635,6 +867,19 @@ export default function Home() {
   // ---- onboarding check ----
   const needsOnboarding = isAuthenticated && !authLoading && !profileQuery.isLoading && !profile?.onboardingComplete;
 
+  // Top of the onboarding funnel — fires once per wizard entry.
+  useEffect(() => {
+    if (needsOnboarding && onboardStartedAtRef.current === null) {
+      onboardStartedAtRef.current = Date.now();
+      trackEvent("onboarding_started");
+    }
+  }, [needsOnboarding, trackEvent]);
+
+  // New logging session whenever the user enters the logger tab.
+  useEffect(() => {
+    if (activeTab === "voice-logger") logSessionCountRef.current = 0;
+  }, [activeTab]);
+
   // ---------------------------------------------------------------------------
   // Onboarding handlers
   // ---------------------------------------------------------------------------
@@ -642,37 +887,154 @@ export default function Home() {
 
   const advanceOnboard = async () => {
     const next = ONBOARD_STEPS[onboardStepIndex + 1];
-    if (onboardStep === "conditions") {
-      // Save profile, then advance to referral step
-      try {
-        await saveProfileMutation.mutateAsync({
-          age: onboardAge ? parseInt(onboardAge) : undefined,
-          weightLbs: onboardWeight ? parseFloat(onboardWeight) : undefined,
-          dietaryChoices: onboardDiet,
-          allergies: onboardAllergies,
-          healthConditions: onboardConditions,
-          onboardingComplete: 1,
-        });
-        setOnboardStep("referral");
-      } catch {
-        toast.error("Failed to save profile. Please try again.");
-      }
-    } else if (onboardStep === "referral") {
-      // Apply referral code if provided, then finish
-      if (onboardReferralCode.trim().length >= 4) {
+    if (onboardStep === "goal") {
+      // Persist goal choice (skip = general_awareness, the DB default — no call needed)
+      trackEvent("goal_selected", { goal: onboardGoal ?? "skipped" });
+      if (onboardGoal && onboardGoal !== "general_awareness") {
         try {
-          const res = await applyReferralCodeMutation.mutateAsync({ code: onboardReferralCode.trim() });
-          if (res.success) toast.success(res.message);
-          else toast.error(res.message);
+          await setGoalMutation.mutateAsync({ goal: onboardGoal });
         } catch {
-          // Non-blocking — continue to dashboard even if code fails
+          // Non-blocking — the default goal still produces a valid weekly report
         }
       }
-      toast.success("Welcome to Clover! Your profile is ready.");
-      setOnboardStep("done");
+      setOnboardStep("first-log");
+    } else if (onboardStep === "notifications") {
+      // Persist the explicit notification choice, then complete onboarding.
+      try {
+        if (onboardReminderChoice === "reminder") {
+          await setReminderMutation.mutateAsync({ enabled: true, time: onboardReminderTime });
+        }
+        trackEvent("notification_preference_set", {
+          enabled: onboardReminderChoice === "reminder",
+          time: onboardReminderChoice === "reminder" ? onboardReminderTime : null,
+        });
+        await saveProfileMutation.mutateAsync({ onboardingComplete: 1 });
+        if (onboardStartedAtRef.current !== null) {
+          trackEvent("onboarding_completed", {
+            duration_seconds: Math.round((Date.now() - onboardStartedAtRef.current) / 1000),
+          });
+        }
+        toast.success("Welcome to Clover — you're all set.");
+        setOnboardStep("done");
+      } catch {
+        toast.error("Something went wrong finishing setup. Please try again.");
+      }
     } else {
       setOnboardStep(next);
     }
+  };
+
+  /**
+   * First log inside onboarding — single-shot (no clarification round; the
+   * "aha moment" should land in seconds, not a Q&A). The clarification
+   * context tells the model to use best estimates instead of asking.
+   */
+  const handleOnboardingTextLog = async () => {
+    const text = onboardLogText.trim();
+    if (!text || onboardLogBusy) return;
+    setOnboardLogBusy(true);
+    try {
+      const result = await analyzeTranscript.mutateAsync({
+        transcript: text,
+        clarificationContext: "First log during onboarding — use best-guess estimates, do not ask follow-up questions.",
+        knownAllergies,
+      });
+      for (const m of result.meals) {
+        await saveLogMutation.mutateAsync({
+          rawSpeech: text,
+          foodName: m.foodName,
+          quantity: m.quantity,
+          calories: m.calories,
+          protein: m.protein,
+          carbs: m.carbs,
+          fat: m.fat,
+          fiber: m.fiber ?? 0,
+          allergensDetected: m.allergensDetected,
+          micronutrients: m.micronutrients,
+          confidence: result.confidence,
+          notes: result.notes ?? undefined,
+          logMethod: onboardLogWasVoice ? "voice" : "text",
+          mealPeriod: m.mealPeriod,
+          dayOffset: m.dayOffset as 0 | -1,
+        });
+      }
+      setOnboardFirstLogDone(true);
+      trackEvent("first_log_completed", { method: onboardLogWasVoice ? "voice" : "text" });
+      toast.success(`Logged: ${result.meals.map(m => m.foodName).join(", ")}`);
+    } catch {
+      toast.error("That one didn't go through — try rephrasing, or use a photo instead.");
+    } finally {
+      setOnboardLogBusy(false);
+    }
+  };
+
+  const handleOnboardingPhotoLog = (file: File) => {
+    setOnboardLogBusy(true);
+    const reader = new FileReader();
+    reader.onload = async e => {
+      try {
+        const dataUrl = e.target?.result as string;
+        const base64 = dataUrl.split(",")[1];
+        if (!base64) throw new Error("encode failed");
+        const uploadResult = await uploadImageMutation.mutateAsync({ imageData: base64, fileName: file.name });
+        const absoluteUrl = uploadResult.url.startsWith("http")
+          ? uploadResult.url
+          : `${window.location.origin}${uploadResult.url}`;
+        const analysis = await analyzeImageMutation.mutateAsync({ imageUrl: absoluteUrl });
+        await logMealFromImageMutation.mutateAsync({
+          imageUrl: absoluteUrl,
+          foodDescription: analysis.foodDescription,
+          calories: analysis.calories,
+          protein: analysis.protein,
+          carbs: analysis.carbs,
+          fat: analysis.fat,
+          fiber: analysis.fiber,
+          allergens: analysis.allergens,
+          confidence: analysis.confidence,
+        });
+        setOnboardFirstLogDone(true);
+        trackEvent("first_log_completed", { method: "photo" });
+        toast.success(`Logged: ${analysis.foodDescription}`);
+      } catch {
+        toast.error("That photo didn't go through — try another, or describe the meal instead.");
+      } finally {
+        setOnboardLogBusy(false);
+      }
+    };
+    reader.onerror = () => {
+      toast.error("Couldn't read that image file.");
+      setOnboardLogBusy(false);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const startOnboardingRecording = () => {
+    const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SR) {
+      toast.error("Voice input isn't supported in this browser — type your meal instead.");
+      return;
+    }
+    const rec = new SR();
+    rec.continuous = false;
+    rec.interimResults = true;
+    rec.lang = "en-US";
+    let final = "";
+    rec.onstart = () => setOnboardRecording(true);
+    rec.onerror = () => {
+      setOnboardRecording(false);
+      toast.error("Voice input hit a snag — you can type your meal instead.");
+    };
+    rec.onend = () => setOnboardRecording(false);
+    rec.onresult = (e: any) => {
+      let interim = "";
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        if (e.results[i].isFinal) final += e.results[i][0].transcript + " ";
+        else interim += e.results[i][0].transcript;
+      }
+      setOnboardLogText(final + interim);
+      if (final) setOnboardLogWasVoice(true);
+    };
+    rec.start();
   };
 
   const toggleArr = (arr: string[], val: string) =>
@@ -689,19 +1051,24 @@ export default function Home() {
   // ambiguous detail into it) — the prompt asks the model to comply, and
   // `round` is the client-side backstop: on the second pass we finalize
   // with whatever we have regardless of what the model returns.
-  const processText = useCallback(async (text: string, clarificationCtx: string | undefined, round: number) => {
+  const processText = useCallback(async (text: string, clarificationCtx: string | undefined, round: number, method: "voice" | "text") => {
+    const gen = analysisGenRef.current;
     setIsAnalyzing(true);
+    if (round === 0) trackEvent("log_attempt_started", { method });
     try {
       const result = await analyzeTranscript.mutateAsync({
         transcript: text,
         clarificationContext: clarificationCtx,
         knownAllergies,
       });
+      // User hit Stop while the model was thinking — discard everything.
+      if (analysisGenRef.current !== gen) return;
 
       if (result.clarifyingQuestion && round === 0) {
         setAwaitingClarification(true);
         setClarificationRound(1);
         setPendingTranscript(text);
+        pendingMethodRef.current = method;
         addChatMsg({
           role: "ai",
           text: result.clarifyingQuestion,
@@ -711,53 +1078,121 @@ export default function Home() {
         return;
       }
 
-      // Save to DB
-      await saveLogMutation.mutateAsync({
-        rawSpeech: clarificationCtx ? `${text} | Clarified: ${clarificationCtx}` : text,
-        foodName: result.foodName,
-        quantity: result.quantity,
-        calories: result.calories,
-        protein: result.protein,
-        carbs: result.carbs,
-        fat: result.fat,
-        fiber: result.fiber ?? 0,
-        allergensDetected: result.allergensDetected,
-        confidence: result.confidence,
-        notes: result.notes ?? undefined,
-      });
+      // Save each meal (one message can describe several eating occasions)
+      const entries: LoggedMealEntry[] = [];
+      for (const m of result.meals) {
+        const saved = await saveLogMutation.mutateAsync({
+          rawSpeech: clarificationCtx ? `${text} | Clarified: ${clarificationCtx}` : text,
+          foodName: m.foodName,
+          quantity: m.quantity,
+          calories: m.calories,
+          protein: m.protein,
+          carbs: m.carbs,
+          fat: m.fat,
+          fiber: m.fiber ?? 0,
+          allergensDetected: m.allergensDetected,
+          micronutrients: m.micronutrients,
+          confidence: result.confidence,
+          notes: result.notes ?? undefined,
+          logMethod: method,
+          mealPeriod: m.mealPeriod,
+          dayOffset: m.dayOffset as 0 | -1,
+        });
+        entries.push({
+          logId: saved.id,
+          foodName: m.foodName,
+          calories: m.calories,
+          protein: m.protein,
+          carbs: m.carbs,
+          fat: m.fat,
+          fiber: m.fiber ?? 0,
+          allergens: m.allergensDetected,
+          mealPeriod: m.mealPeriod,
+          dayOffset: m.dayOffset,
+        });
+      }
       setAwaitingClarification(false);
       setPendingTranscript("");
       setClarificationRound(0);
       setClarificationHistory([]);
+      logSessionCountRef.current += entries.length;
+      trackEvent("log_attempt_succeeded", { method, meal_count_in_session: logSessionCountRef.current });
 
       addChatMsg({
         role: "ai",
         text: "",
         confidence: result.confidence,
         logSaved: true,
-        loggedMeal: {
-          foodName: result.foodName,
-          calories: result.calories,
-          protein: result.protein,
-          carbs: result.carbs,
-          fat: result.fat,
-          fiber: result.fiber ?? 0,
-          allergens: result.allergensDetected,
-          notes: result.notes,
-        },
+        loggedMeals: entries,
+        notes: result.notes,
       });
     } catch (err: any) {
+      if (analysisGenRef.current !== gen) return; // cancelled — stay quiet
       const msg = err?.message ?? "";
       if (msg.includes("AI call limit") || msg.includes("Upgrade")) {
         setShowUpgradeModal(true);
+        trackEvent("log_attempt_failed", { method, reason: "ai_call_limit" });
         addChatMsg({ role: "ai", text: "You've reached your free tier limit (10 AI logs/month). Upgrade to Clover Plus for unlimited logging! 🌿" });
       } else {
+        trackEvent("log_attempt_failed", { method, reason: msg.slice(0, 200) || "unknown" });
         addChatMsg({ role: "ai", text: "Sorry, analysis failed. Please try again." });
       }
     } finally {
-      setIsAnalyzing(false);
+      if (analysisGenRef.current === gen) setIsAnalyzing(false);
     }
-  }, [analyzeTranscript, saveLogMutation, addChatMsg, knownAllergies]);
+  }, [analyzeTranscript, saveLogMutation, addChatMsg, knownAllergies, trackEvent]);
+
+  /** Stop button: discard the in-flight analysis. Nothing gets logged. */
+  const handleCancelAnalysis = () => {
+    analysisGenRef.current += 1;
+    setIsAnalyzing(false);
+    setIsAnalyzingPhoto(false);
+    addChatMsg({ role: "ai", text: "Stopped — nothing was logged. Edit your message and try again whenever you like." });
+  };
+
+  /** In-chat undo: delete the saved log and mark its card as removed. */
+  const handleUndoLog = async (messageId: string, logId: number) => {
+    setUndoingLogIds(prev => [...prev, logId]);
+    try {
+      await deleteLogMutation.mutateAsync({ id: logId });
+      setChatMessages(prev =>
+        prev.map(m =>
+          m.id === messageId
+            ? {
+                ...m,
+                loggedMeals: m.loggedMeals?.map(e => (e.logId === logId ? { ...e, undone: true } : e)),
+              }
+            : m
+        )
+      );
+      toast.success("Log removed");
+    } catch {
+      toast.error("Couldn't remove that log — try again.");
+    } finally {
+      setUndoingLogIds(prev => prev.filter(id => id !== logId));
+    }
+  };
+
+  const handleCopyMessage = async (msg: ChatMessage) => {
+    const text =
+      msg.text ||
+      (msg.loggedMeals ?? [])
+        .map(m => `${m.foodName} — ${Math.round(m.calories)} kcal, ${Math.round(m.protein)}g protein, ${Math.round(m.carbs)}g carbs, ${Math.round(m.fat)}g fat`)
+        .join("\n");
+    if (!text) return;
+    try {
+      await navigator.clipboard.writeText(text);
+      toast.success("Copied");
+    } catch {
+      toast.error("Couldn't copy to clipboard");
+    }
+  };
+
+  /** Redo: put a previous message back into the input bar for editing/resending. */
+  const handleEditMessage = (msg: ChatMessage) => {
+    setChatInput(msg.text);
+    chatInputWasVoiceRef.current = false;
+  };
 
   const handleSendChat = async () => {
     const text = chatInput.trim();
@@ -769,22 +1204,26 @@ export default function Home() {
     if (awaitingClarification) {
       const history = [...clarificationHistory, text];
       setClarificationHistory(history);
-      await processText(pendingTranscript, history.join("; "), clarificationRound);
+      await processText(pendingTranscript, history.join("; "), clarificationRound, pendingMethodRef.current);
     } else {
-      await processText(text, undefined, 0);
+      const method = chatInputWasVoiceRef.current ? "voice" : "text";
+      chatInputWasVoiceRef.current = false;
+      await processText(text, undefined, 0, method);
     }
   };
 
   const handleSkipClarification = async () => {
     if (!pendingTranscript) return;
-    addChatMsg({ role: "user", text: "Skip — use average estimate" });
-    const history = [...clarificationHistory, "User skipped clarification, use average estimates."];
+    addChatMsg({ role: "user", text: "Log it anyway — use your best guess" });
+    const history = [...clarificationHistory, "User chose to log anyway — use best estimates."];
     setClarificationHistory(history);
-    await processText(pendingTranscript, history.join("; "), clarificationRound);
+    await processText(pendingTranscript, history.join("; "), clarificationRound, pendingMethodRef.current);
   };
 
   const handlePhotoSelected = (file: File) => {
+    const gen = analysisGenRef.current;
     setIsAnalyzingPhoto(true);
+    trackEvent("log_attempt_started", { method: "photo" });
     const reader = new FileReader();
     reader.onload = async e => {
       try {
@@ -798,13 +1237,15 @@ export default function Home() {
           imageData: base64,
           fileName: file.name,
         });
+        if (analysisGenRef.current !== gen) return;
         const absoluteUrl = uploadResult.url.startsWith("http")
           ? uploadResult.url
           : `${window.location.origin}${uploadResult.url}`;
 
         const analysis = await analyzeImageMutation.mutateAsync({ imageUrl: absoluteUrl });
+        if (analysisGenRef.current !== gen) return;
 
-        await logMealFromImageMutation.mutateAsync({
+        const saved = await logMealFromImageMutation.mutateAsync({
           imageUrl: absoluteUrl,
           foodDescription: analysis.foodDescription,
           calories: analysis.calories,
@@ -816,40 +1257,58 @@ export default function Home() {
           confidence: analysis.confidence,
         });
 
+        logSessionCountRef.current += 1;
+        trackEvent("log_attempt_succeeded", { method: "photo", meal_count_in_session: logSessionCountRef.current });
+
         addChatMsg({
           role: "ai",
           text: "",
           confidence: analysis.confidence,
           logSaved: true,
-          loggedMeal: {
-            foodName: analysis.foodDescription,
-            calories: analysis.calories,
-            protein: analysis.protein,
-            carbs: analysis.carbs,
-            fat: analysis.fat,
-            fiber: analysis.fiber,
-            allergens: analysis.allergens,
-          },
+          loggedMeals: [
+            {
+              logId: saved.id,
+              foodName: analysis.foodDescription,
+              calories: analysis.calories,
+              protein: analysis.protein,
+              carbs: analysis.carbs,
+              fat: analysis.fat,
+              fiber: analysis.fiber,
+              allergens: analysis.allergens,
+              mealPeriod: null,
+              dayOffset: 0,
+            },
+          ],
         });
       } catch (err: any) {
+        if (analysisGenRef.current !== gen) return; // cancelled — stay quiet
         const msg = err?.message ?? "";
         if (msg.includes("AI call limit") || msg.includes("Upgrade")) {
           setShowUpgradeModal(true);
+          trackEvent("log_attempt_failed", { method: "photo", reason: "ai_call_limit" });
           addChatMsg({ role: "ai", text: "You've reached your free tier limit. Upgrade to Clover Plus for unlimited logging! 🌿" });
         } else {
+          trackEvent("log_attempt_failed", { method: "photo", reason: msg.slice(0, 200) || "unknown" });
           addChatMsg({ role: "ai", text: "Sorry, that photo couldn't be analyzed. Please try again." });
         }
       } finally {
-        setIsAnalyzingPhoto(false);
+        if (analysisGenRef.current === gen) setIsAnalyzingPhoto(false);
       }
     };
     reader.onerror = () => {
+      trackEvent("log_attempt_failed", { method: "photo", reason: "file_read_error" });
       toast.error("Failed to read image file");
       setIsAnalyzingPhoto(false);
     };
     reader.readAsDataURL(file);
   };
 
+  /**
+   * Voice input, chat-app style: recording buffers the transcript privately —
+   * nothing appears while you speak. Tapping the mic again stops recording
+   * and drops the full transcript into the input bar, where it waits for the
+   * user to press Send. No auto-send, ever.
+   */
   const startRecording = () => {
     const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (!SR) {
@@ -859,54 +1318,41 @@ export default function Home() {
     }
     const rec = new SR();
     rec.continuous = true;
-    rec.interimResults = true;
+    rec.interimResults = false; // buffer silently; only final results are kept
     rec.lang = "en-US";
-    let final = "";
+    let finalTranscript = "";
     rec.onstart = () => { setIsRecording(true); setSpeechErrorTip(null); };
     rec.onerror = (e: any) => {
       setIsRecording(false);
       if (e.error === "network") {
         setSpeechErrorTip("Chrome's cloud speech service was blocked. Use the text input instead.");
-      } else {
+      } else if (e.error !== "aborted") {
         setSpeechErrorTip(`Mic error: ${e.error}. Check browser permissions.`);
       }
     };
-    rec.onend = () => setIsRecording(false);
     rec.onresult = (e: any) => {
-      let interim = "";
       for (let i = e.resultIndex; i < e.results.length; i++) {
-        if (e.results[i].isFinal) final += e.results[i][0].transcript + " ";
-        else interim += e.results[i][0].transcript;
+        if (e.results[i].isFinal) finalTranscript += e.results[i][0].transcript + " ";
       }
-      setChatInput(final + interim);
+    };
+    rec.onend = () => {
+      setIsRecording(false);
+      const spoken = finalTranscript.trim();
+      if (spoken) {
+        // Append to whatever's already typed, then hand control back to the user.
+        setChatInput(prev => (prev.trim() ? `${prev.trim()} ${spoken}` : spoken));
+        chatInputWasVoiceRef.current = true;
+      } else {
+        toast.warning("No speech detected.");
+      }
     };
     rec.start();
     recognitionRef.current = rec;
   };
 
   const stopRecording = () => {
+    // Just stop — onend places the transcript in the input bar. Send stays manual.
     recognitionRef.current?.stop();
-    setIsRecording(false);
-    setTimeout(() => {
-      setChatInput(prev => {
-        if (prev.trim()) {
-          // auto-send after stopping
-          const text = prev.trim();
-          setChatInput("");
-          addChatMsg({ role: "user", text });
-          if (awaitingClarification) {
-            const history = [...clarificationHistory, text];
-            setClarificationHistory(history);
-            processText(pendingTranscript, history.join("; "), clarificationRound);
-          } else {
-            processText(text, undefined, 0);
-          }
-        } else {
-          toast.warning("No speech detected.");
-        }
-        return "";
-      });
-    }, 600);
   };
 
   // ---------------------------------------------------------------------------
@@ -993,121 +1439,152 @@ export default function Home() {
           </div>
 
           <Card className="border-border/60 shadow-lg">
-            <CardHeader className="p-6 border-b border-border/40">
-              <div className="flex items-center gap-2 text-primary font-serif font-bold text-lg">
-                <Leaf className="h-5 w-5" /> Welcome to Clover
-              </div>
-              <CardDescription className="text-xs mt-1">
-                Let's personalise your wellness engine. You can always update this later.
-              </CardDescription>
-            </CardHeader>
-
-            <CardContent className="p-6 space-y-6 min-h-[200px]">
-              {onboardStep === "age" && (
-                <div className="space-y-4">
-                  <h3 className="font-serif text-xl font-bold">How old are you?</h3>
-                  <p className="text-sm text-muted-foreground">Used to calibrate your daily calorie and macro targets.</p>
-                  <Input
-                    type="number"
-                    placeholder="e.g. 28"
-                    value={onboardAge}
-                    onChange={e => setOnboardAge(e.target.value)}
-                    className="text-lg h-12 max-w-xs"
-                    autoFocus
-                    onKeyDown={e => { if (e.key === "Enter") advanceOnboard(); }}
-                  />
-                </div>
-              )}
-              {onboardStep === "weight" && (
-                <div className="space-y-4">
-                  <h3 className="font-serif text-xl font-bold">What's your current weight?</h3>
-                  <p className="text-sm text-muted-foreground">In pounds (lbs). Helps us estimate your protein needs.</p>
-                  <Input
-                    type="number"
-                    placeholder="e.g. 155"
-                    value={onboardWeight}
-                    onChange={e => setOnboardWeight(e.target.value)}
-                    className="text-lg h-12 max-w-xs"
-                    autoFocus
-                    onKeyDown={e => { if (e.key === "Enter") advanceOnboard(); }}
-                  />
-                </div>
-              )}
-              {onboardStep === "diet" && (
-                <div className="space-y-4">
-                  <h3 className="font-serif text-xl font-bold">What's your dietary style?</h3>
-                  <p className="text-sm text-muted-foreground">Select all that apply.</p>
-                  <div className="flex flex-wrap gap-2">
-                    {DIET_OPTIONS.map(d => (
-                      <Button
-                        key={d}
-                        type="button"
-                        variant={onboardDiet.includes(d) ? "default" : "outline"}
-                        size="sm"
-                        onClick={() => setOnboardDiet(toggleArr(onboardDiet, d))}
-                        className="rounded-full h-8 px-4 text-xs"
-                      >{d}</Button>
-                    ))}
+            <CardContent className="p-6 space-y-6 min-h-[260px]">
+              {onboardStep === "welcome" && (
+                <div className="space-y-4 text-center py-4">
+                  <div className="flex items-center justify-center gap-2 text-primary font-serif font-bold text-2xl">
+                    <Leaf className="h-7 w-7" /> Clover
                   </div>
-                </div>
-              )}
-              {onboardStep === "allergies" && (
-                <div className="space-y-4">
-                  <h3 className="font-serif text-xl font-bold">Any food allergies or sensitivities?</h3>
-                  <p className="text-sm text-muted-foreground">Clover AI will flag these in every meal analysis.</p>
-                  <div className="flex flex-wrap gap-2">
-                    {ALLERGEN_OPTIONS.map(a => (
-                      <Button
-                        key={a}
-                        type="button"
-                        variant={onboardAllergies.includes(a) ? "destructive" : "outline"}
-                        size="sm"
-                        onClick={() => setOnboardAllergies(toggleArr(onboardAllergies, a))}
-                        className="rounded-full h-8 px-4 text-xs"
-                      >{a}</Button>
-                    ))}
-                  </div>
-                </div>
-              )}
-              {onboardStep === "conditions" && (
-                <div className="space-y-4">
-                  <h3 className="font-serif text-xl font-bold">Any health conditions to note?</h3>
-                  <p className="text-sm text-muted-foreground">Helps Clover tailor nutritional notes and alerts.</p>
-                  <div className="flex flex-wrap gap-2">
-                    {CONDITION_OPTIONS.map(c => (
-                      <Button
-                        key={c}
-                        type="button"
-                        variant={onboardConditions.includes(c) ? "default" : "outline"}
-                        size="sm"
-                        onClick={() => setOnboardConditions(toggleArr(onboardConditions, c))}
-                        className="rounded-full h-8 px-4 text-xs"
-                      >{c}</Button>
-                    ))}
-                  </div>
-                </div>
-              )}
-              {onboardStep === "referral" && (
-                <div className="space-y-4">
-                  <h3 className="font-serif text-xl font-bold">Got a referral code?</h3>
-                  <p className="text-sm text-muted-foreground">
-                    Enter a friend's referral code to earn a free month of Clover Plus.
+                  <h3 className="font-serif text-xl font-bold">Food, in context — not on trial.</h3>
+                  <p className="text-sm text-muted-foreground max-w-sm mx-auto leading-relaxed">
+                    Clover is about understanding what you eat, not judging it. A quick photo or a few
+                    spoken words, whenever it suits you — no calorie courtroom, no guilt about missed days.
                   </p>
-                  <div className="space-y-3">
-                    <input
-                      type="text"
-                      placeholder="e.g. CLOVER-ABC123"
-                      value={onboardReferralCode}
-                      onChange={e => setOnboardReferralCode(e.target.value.toUpperCase())}
-                      onKeyDown={e => { if (e.key === "Enter") advanceOnboard(); }}
-                      className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 tracking-widest font-mono"
-                    />
+                </div>
+              )}
+              {onboardStep === "goal" && (
+                <div className="space-y-4">
+                  <h3 className="font-serif text-xl font-bold">What matters most to you right now?</h3>
+                  <p className="text-sm text-muted-foreground">This shapes what your weekly summary highlights. You can change it anytime.</p>
+                  <div className="space-y-2">
+                    {GOAL_OPTIONS.map(g => (
+                      <button
+                        key={g.value}
+                        type="button"
+                        onClick={() => setOnboardGoal(g.value)}
+                        className={`w-full text-left rounded-xl border px-4 py-3 transition-colors ${
+                          onboardGoal === g.value
+                            ? "border-primary bg-primary/5"
+                            : "border-border/60 hover:border-border"
+                        }`}
+                      >
+                        <span className="block text-sm font-medium">{g.label}</span>
+                        <span className="block text-xs text-muted-foreground mt-0.5">{g.description}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {onboardStep === "first-log" && (
+                <div className="space-y-4">
+                  <h3 className="font-serif text-xl font-bold">Log your first meal — right now.</h3>
+                  <p className="text-sm text-muted-foreground">
+                    Whatever you ate last: speak it, type it, or snap it. This is the whole app — it takes seconds.
+                  </p>
+                  {onboardFirstLogDone ? (
+                    <div className="flex items-center gap-3 rounded-xl border border-emerald-200 bg-emerald-50/60 px-4 py-3">
+                      <div className="h-6 w-6 rounded-full bg-emerald-500 flex items-center justify-center shrink-0">
+                        <Check className="h-4 w-4 text-white" />
+                      </div>
+                      <p className="text-sm text-emerald-800 font-medium">First meal logged — that's it, that's the habit.</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      <div className="flex gap-2 items-center border border-border/60 rounded-2xl bg-card px-3 py-2">
+                        <button
+                          type="button"
+                          onClick={startOnboardingRecording}
+                          disabled={onboardLogBusy}
+                          className={`shrink-0 h-9 w-9 rounded-full flex items-center justify-center transition-colors ${
+                            onboardRecording
+                              ? "bg-destructive text-destructive-foreground animate-pulse"
+                              : "bg-primary/10 text-primary hover:bg-primary/20"
+                          }`}
+                          title="Speak your meal"
+                        >
+                          <Mic className="h-4 w-4" />
+                        </button>
+                        <Input
+                          value={onboardLogText}
+                          onChange={e => { setOnboardLogText(e.target.value); setOnboardLogWasVoice(false); }}
+                          onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); handleOnboardingTextLog(); } }}
+                          placeholder='e.g. "two eggs on toast and a coffee"'
+                          className="border-0 shadow-none focus-visible:ring-0 text-sm bg-transparent"
+                          disabled={onboardLogBusy}
+                        />
+                        <Button
+                          size="sm"
+                          onClick={handleOnboardingTextLog}
+                          disabled={!onboardLogText.trim() || onboardLogBusy}
+                          className="shrink-0 h-9 w-9 p-0 rounded-full"
+                        >
+                          {onboardLogBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                        </Button>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <div className="h-px bg-border/60 flex-1" />
+                        <span className="text-[10px] uppercase tracking-wider text-muted-foreground">or</span>
+                        <div className="h-px bg-border/60 flex-1" />
+                      </div>
+                      <input
+                        ref={onboardPhotoInputRef}
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={e => {
+                          const file = e.target.files?.[0];
+                          if (file) handleOnboardingPhotoLog(file);
+                          e.target.value = "";
+                        }}
+                      />
+                      <Button
+                        variant="outline"
+                        className="w-full gap-2"
+                        disabled={onboardLogBusy}
+                        onClick={() => onboardPhotoInputRef.current?.click()}
+                      >
+                        <Camera className="h-4 w-4" /> Snap a photo of a meal
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              )}
+              {onboardStep === "notifications" && (
+                <div className="space-y-4">
+                  <h3 className="font-serif text-xl font-bold">Want a daily nudge?</h3>
+                  <p className="text-sm text-muted-foreground">
+                    Entirely your call — Clover works just as well without one. You can change this anytime in Settings.
+                  </p>
+                  {/* Both options carry equal visual weight — "no reminders" is a full-size choice, not a buried link. */}
+                  <div className="space-y-2">
                     <button
                       type="button"
-                      onClick={() => advanceOnboard()}
-                      className="text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground transition-colors"
+                      onClick={() => setOnboardReminderChoice("reminder")}
+                      className={`w-full text-left rounded-xl border px-4 py-3 transition-colors ${
+                        onboardReminderChoice === "reminder" ? "border-primary bg-primary/5" : "border-border/60 hover:border-border"
+                      }`}
                     >
-                      Skip — I don't have a code
+                      <span className="block text-sm font-medium">Remind me once a day</span>
+                      <span className="block text-xs text-muted-foreground mt-0.5">One reminder at a time you pick. No escalation, no re-prompts.</span>
+                      {onboardReminderChoice === "reminder" && (
+                        <input
+                          type="time"
+                          value={onboardReminderTime}
+                          onChange={e => setOnboardReminderTime(e.target.value)}
+                          onClick={e => e.stopPropagation()}
+                          className="mt-2 rounded-md border border-input bg-background px-2 py-1 text-sm"
+                        />
+                      )}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setOnboardReminderChoice("none")}
+                      className={`w-full text-left rounded-xl border px-4 py-3 transition-colors ${
+                        onboardReminderChoice === "none" ? "border-primary bg-primary/5" : "border-border/60 hover:border-border"
+                      }`}
+                    >
+                      <span className="block text-sm font-medium">No reminders — I'll log on my own time</span>
+                      <span className="block text-xs text-muted-foreground mt-0.5">Clover never pings you. Logging stays entirely on your schedule.</span>
                     </button>
                   </div>
                 </div>
@@ -1126,21 +1603,49 @@ export default function Home() {
               >
                 <ChevronLeft className="h-4 w-4 mr-1" /> Back
               </Button>
-              <Button
-                onClick={advanceOnboard}
-                disabled={saveProfileMutation.isPending || applyReferralCodeMutation.isPending}
-                className="gap-2"
-              >
-                {(saveProfileMutation.isPending || applyReferralCodeMutation.isPending) ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : onboardStep === "conditions" ? (
-                  <>Next <ChevronRight className="h-4 w-4" /></>
-                ) : onboardStep === "referral" ? (
-                  <>Finish Setup <Check className="h-4 w-4" /></>
-                ) : (
-                  <>Next <ChevronRight className="h-4 w-4" /></>
+              <div className="flex items-center gap-3">
+                {onboardStep === "goal" && onboardGoal === null && (
+                  <button
+                    type="button"
+                    onClick={() => { trackEvent("goal_selected", { goal: "skipped" }); setOnboardGoal("general_awareness"); setOnboardStep("first-log"); }}
+                    className="text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground transition-colors"
+                  >
+                    Skip — just general awareness
+                  </button>
                 )}
-              </Button>
+                {onboardStep === "first-log" && !onboardFirstLogDone && (
+                  <button
+                    type="button"
+                    onClick={() => setOnboardStep("notifications")}
+                    className="text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground transition-colors"
+                  >
+                    Skip for now
+                  </button>
+                )}
+                <Button
+                  onClick={advanceOnboard}
+                  disabled={
+                    saveProfileMutation.isPending ||
+                    setGoalMutation.isPending ||
+                    setReminderMutation.isPending ||
+                    onboardLogBusy ||
+                    (onboardStep === "goal" && onboardGoal === null) ||
+                    (onboardStep === "first-log" && !onboardFirstLogDone) ||
+                    (onboardStep === "notifications" && onboardReminderChoice === null)
+                  }
+                  className="gap-2"
+                >
+                  {saveProfileMutation.isPending || setGoalMutation.isPending || setReminderMutation.isPending ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : onboardStep === "welcome" ? (
+                    <>Get started <ChevronRight className="h-4 w-4" /></>
+                  ) : onboardStep === "notifications" ? (
+                    <>Finish <Check className="h-4 w-4" /></>
+                  ) : (
+                    <>Next <ChevronRight className="h-4 w-4" /></>
+                  )}
+                </Button>
+              </div>
             </div>
           </Card>
         </div>
@@ -1179,18 +1684,17 @@ export default function Home() {
             </div>
           </div>
 
-          {/* Nav */}
+          {/* Nav — Core golden-path items only; Peripheral lives under "More"
+              and Beta-Gated features (travel, integrations) have no entry at
+              all, per clover-feature-exposure-rules.md */}
           <nav className="space-y-1">
             {([
-              { id: "dashboard" as const, label: "Habits Dashboard", icon: BarChart3, pulse: false },
-              { id: "voice-logger" as const, label: "Voice Food Logger", icon: Mic, pulse: true },
-              { id: "calendar" as const, label: "Calendar View", icon: Calendar, pulse: false },
-              { id: "recipes" as const, label: "Curated Recipes", icon: Apple, pulse: false },
-              { id: "mealplan" as const, label: "Meal Planning", icon: Wheat, pulse: false },
-              { id: "travel" as const, label: "Travel Sourcing", icon: Compass, pulse: false },
-              { id: "integrations" as const, label: "Integrations", icon: Smartphone, pulse: false },
-          { id: "billing" as const, label: "Manage Plan", icon: CreditCard, pulse: false },
-            ]).map(({ id, label, icon: Icon, pulse }) => (
+              { id: "home" as const, label: "Home", icon: Leaf, pulse: false, dot: false },
+              { id: "voice-logger" as const, label: "Log a Meal", icon: Mic, pulse: true, dot: false },
+              { id: "calendar" as const, label: "Past Logs", icon: Calendar, pulse: false, dot: false },
+              { id: "weekly-report" as const, label: "Weekly Report", icon: Sparkles, pulse: false, dot: weeklyReportReady },
+              { id: "settings" as const, label: "Settings", icon: Pencil, pulse: false, dot: false },
+            ]).map(({ id, label, icon: Icon, pulse, dot }) => (
               <Button
                 key={id}
                 variant={activeTab === id ? "secondary" : "ghost"}
@@ -1199,9 +1703,34 @@ export default function Home() {
               >
                 <Icon className="h-4 w-4" /> {label}
                 {pulse && <span className="absolute right-3 top-2.5 h-2 w-2 rounded-full bg-primary animate-pulse" />}
+                {/* Low-key "report ready" indicator — deliberately not a notification */}
+                {dot && <span className="absolute right-3 top-2.5 h-2 w-2 rounded-full bg-emerald-500" />}
               </Button>
             ))}
           </nav>
+
+          {/* Peripheral features — secondary entry point, low emphasis */}
+          <div className="mt-4 pt-3 border-t border-border/30">
+            <p className="px-3 pb-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">More</p>
+            <nav className="space-y-0.5">
+              {([
+                { id: "dashboard" as const, label: "My Stats", icon: BarChart3 },
+                ...(FEATURE_FLAGS.curatedRecipes ? [{ id: "recipes" as const, label: "Curated Recipes", icon: Apple }] : []),
+                ...(FEATURE_FLAGS.mealPlanning ? [{ id: "mealplan" as const, label: "Meal Planning", icon: Wheat }] : []),
+                ...(FEATURE_FLAGS.billing ? [{ id: "billing" as const, label: "Manage Plan", icon: CreditCard }] : []),
+              ]).map(({ id, label, icon: Icon }) => (
+                <Button
+                  key={id}
+                  variant={activeTab === id ? "secondary" : "ghost"}
+                  size="sm"
+                  className="w-full justify-start gap-2.5 text-xs font-normal text-muted-foreground"
+                  onClick={() => setActiveTab(id)}
+                >
+                  <Icon className="h-3.5 w-3.5" /> {label}
+                </Button>
+              ))}
+            </nav>
+          </div>
 
           {/* Admin link — only visible to admins */}
           {user?.role === "admin" && (
@@ -1255,7 +1784,66 @@ export default function Home() {
         </header>
         <div className="p-6 md:p-10">
 
-        {/* ===== A. DASHBOARD ===== */}
+        {/* ===== GOLDEN-PATH HOME ===== */}
+        {activeTab === "home" && (
+          <div className="max-w-xl mx-auto space-y-8 pt-8">
+            {/* One dominant CTA — the whole point of the screen */}
+            <div className="text-center space-y-6">
+              <h2 className="font-serif text-2xl font-bold">
+                {(() => {
+                  const h = new Date().getHours();
+                  const name = user?.name?.split(" ")[0];
+                  const greeting = h < 12 ? "Good morning" : h < 17 ? "Good afternoon" : "Good evening";
+                  return name ? `${greeting}, ${name}` : greeting;
+                })()}
+              </h2>
+              <Button
+                size="lg"
+                className="h-16 px-10 text-base gap-3 rounded-2xl shadow-md"
+                onClick={() => setActiveTab("voice-logger")}
+              >
+                <Mic className="h-5 w-5" /> Log a meal
+              </Button>
+              {/* Presence, not judgment: a count, never a progress bar or target */}
+              <p className="text-sm text-muted-foreground">
+                {(() => {
+                  const n = (todayLogsQuery.data ?? []).length;
+                  if (n === 0) return "Nothing logged yet today — no rush.";
+                  return `${n} meal${n === 1 ? "" : "s"} logged today`;
+                })()}
+              </p>
+            </div>
+
+            {/* Quiet access points: past logs + weekly report */}
+            <div className="grid grid-cols-2 gap-3">
+              <button
+                type="button"
+                onClick={() => setActiveTab("calendar")}
+                className="rounded-xl border border-border/60 bg-card px-4 py-4 text-left hover:border-border transition-colors"
+              >
+                <Calendar className="h-4 w-4 text-muted-foreground mb-2" />
+                <span className="block text-sm font-medium">Past logs</span>
+                <span className="block text-xs text-muted-foreground mt-0.5">Everything you've logged</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveTab("weekly-report")}
+                className="relative rounded-xl border border-border/60 bg-card px-4 py-4 text-left hover:border-border transition-colors"
+              >
+                <Sparkles className="h-4 w-4 text-muted-foreground mb-2" />
+                <span className="block text-sm font-medium">Weekly report</span>
+                <span className="block text-xs text-muted-foreground mt-0.5">
+                  {weeklyReportReady ? "A new one is ready" : "Your week, kindly summarized"}
+                </span>
+                {weeklyReportReady && (
+                  <span className="absolute right-3 top-3 h-2 w-2 rounded-full bg-emerald-500" />
+                )}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* ===== A. STATS DASHBOARD (Peripheral — reachable via "More" only) ===== */}
         {activeTab === "dashboard" && (
           <div className="space-y-8 max-w-5xl">
 
@@ -1585,14 +2173,17 @@ export default function Home() {
               </Card>
             </div>
 
+            {/* ===== Nutrients (rough estimates across categories) ===== */}
+            <NutrientPanel />
+
             {/* ===== Referral Card ===== */}
             <ReferralCard />
 
           </div>
         )}
 
-        {/* ===== Floating AI Chat Button (visible on dashboard) ===== */}
-        {isAuthenticated && activeTab === "dashboard" && (
+        {/* ===== Floating AI Chat Button (Peripheral — flag-gated, dashboard only) ===== */}
+        {FEATURE_FLAGS.aiNutritionChat && isAuthenticated && activeTab === "dashboard" && (
           <>
             {/* Floating button */}
             <button
@@ -1622,9 +2213,9 @@ export default function Home() {
                     placeholder="Ask about your nutrition..."
                     emptyStateMessage="Ask me anything about your food logs!"
                     suggestedPrompts={[
-                      "How many calories did I have today?",
-                      "What was my highest-protein meal?",
-                      "Am I hitting my fiber target?",
+                      "I've been feeling tired lately — anything in my data?",
+                      "How's my iron and magnesium looking?",
+                      "What was my highest-protein meal this week?",
                     ]}
                   />
                 </div>
@@ -1650,52 +2241,126 @@ export default function Home() {
                   <p className="text-xs mt-1">Try: "I had oatmeal with banana and a coffee"</p>
                 </div>
               )}
-              {chatMessages.map(msg => (
-                <div
-                  key={msg.id}
-                  className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}
-                >
+              {chatMessages.map(msg => {
+                const hasCards = !!msg.loggedMeals?.length;
+                return (
                   <div
-                    className={`${msg.loggedMeal ? "max-w-[92%]" : "max-w-[80%]"} rounded-2xl px-4 py-3 text-sm leading-relaxed ${
-                      msg.role === "user"
-                        ? "bg-primary text-primary-foreground rounded-br-sm"
-                        : "bg-card border border-border/60 text-foreground rounded-bl-sm"
-                    } ${msg.loggedMeal ? "!p-0 overflow-hidden !bg-transparent !border-0" : ""}`}
+                    key={msg.id}
+                    className={`group flex flex-col ${msg.role === "user" ? "items-end" : "items-start"}`}
                   >
-                    {msg.role === "ai" && msg.confidence && !msg.loggedMeal && (
-                      <div className="flex items-center gap-1.5 mb-1.5">
-                        <BrainCircuit className="h-3.5 w-3.5 text-primary" />
-                        <Badge variant="outline" className={`text-[9px] ${confidenceColor(msg.confidence)}`}>
-                          {msg.confidence} confidence
-                        </Badge>
+                    <div
+                      className={`${hasCards ? "max-w-[92%]" : "max-w-[80%]"} rounded-2xl px-4 py-3 text-sm leading-relaxed ${
+                        msg.role === "user"
+                          ? "bg-primary text-primary-foreground rounded-br-sm"
+                          : "bg-card border border-border/60 text-foreground rounded-bl-sm"
+                      } ${hasCards ? "!p-0 overflow-hidden !bg-transparent !border-0 space-y-2 w-full" : ""}`}
+                    >
+                      {msg.role === "ai" && msg.confidence && !hasCards && (
+                        <div className="flex items-center gap-1.5 mb-1.5">
+                          <BrainCircuit className="h-3.5 w-3.5 text-primary" />
+                          <Badge variant="outline" className={`text-[9px] ${confidenceColor(msg.confidence)}`}>
+                            {msg.confidence} confidence
+                          </Badge>
+                        </div>
+                      )}
+                      {msg.imageDataUrl && (
+                        <img
+                          src={msg.imageDataUrl}
+                          alt="Uploaded meal"
+                          className="rounded-xl mb-2 max-h-48 w-auto object-cover"
+                        />
+                      )}
+                      {hasCards ? (
+                        <>
+                          {msg.loggedMeals!.map(entry => (
+                            <LoggedMealCard
+                              key={entry.logId}
+                              meal={entry}
+                              confidence={msg.confidence}
+                              onUndo={() => handleUndoLog(msg.id, entry.logId)}
+                              undoing={undoingLogIds.includes(entry.logId)}
+                            />
+                          ))}
+                          {msg.notes && (
+                            <p className="text-xs text-muted-foreground italic px-1">{msg.notes}</p>
+                          )}
+                          {/* What else Clover can do from here */}
+                          {msg.loggedMeals!.some(e => !e.undone) && (
+                            <div className="flex flex-wrap gap-1.5 px-1 pt-0.5">
+                              <button
+                                type="button"
+                                onClick={() => setActiveTab("dashboard")}
+                                className="text-[11px] rounded-full border border-border/60 px-2.5 py-1 text-muted-foreground hover:text-foreground hover:border-border transition-colors"
+                              >
+                                See today's totals
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setActiveTab("weekly-report")}
+                                className="text-[11px] rounded-full border border-border/60 px-2.5 py-1 text-muted-foreground hover:text-foreground hover:border-border transition-colors"
+                              >
+                                View weekly report
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => { setActiveTab("dashboard"); setShowAiChat(true); }}
+                                className="text-[11px] rounded-full border border-border/60 px-2.5 py-1 text-muted-foreground hover:text-foreground hover:border-border transition-colors"
+                              >
+                                Ask about my nutrition
+                              </button>
+                            </div>
+                          )}
+                        </>
+                      ) : (
+                        msg.text && <p className="whitespace-pre-line">{msg.text}</p>
+                      )}
+                    </div>
+                    {/* Message actions — copy for everything, edit/redo for your own messages */}
+                    {(msg.text || hasCards) && (
+                      <div className="flex gap-1 mt-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button
+                          type="button"
+                          onClick={() => handleCopyMessage(msg)}
+                          title="Copy"
+                          className="h-6 w-6 rounded-md flex items-center justify-center text-muted-foreground/70 hover:text-foreground hover:bg-muted/60 transition-colors"
+                        >
+                          <Copy className="h-3 w-3" />
+                        </button>
+                        {msg.role === "user" && msg.text && (
+                          <button
+                            type="button"
+                            onClick={() => handleEditMessage(msg)}
+                            title="Edit & resend"
+                            className="h-6 w-6 rounded-md flex items-center justify-center text-muted-foreground/70 hover:text-foreground hover:bg-muted/60 transition-colors"
+                          >
+                            <Pencil className="h-3 w-3" />
+                          </button>
+                        )}
                       </div>
                     )}
-                    {msg.imageDataUrl && (
-                      <img
-                        src={msg.imageDataUrl}
-                        alt="Uploaded meal"
-                        className="rounded-xl mb-2 max-h-48 w-auto object-cover"
-                      />
-                    )}
-                    {msg.loggedMeal ? (
-                      <LoggedMealCard meal={msg.loggedMeal} confidence={msg.confidence} />
-                    ) : (
-                      msg.text && <p className="whitespace-pre-line">{msg.text}</p>
-                    )}
                   </div>
-                </div>
-              ))}
+                );
+              })}
               {(isAnalyzing || isAnalyzingPhoto) && (
                 <div className="flex justify-start">
-                  <div className="bg-card border border-border/60 rounded-2xl rounded-bl-sm px-4 py-3 flex items-center gap-2 text-xs text-muted-foreground">
-                    <Loader2 className="h-3.5 w-3.5 animate-spin" /> Analyzing with USDA data...
+                  <div className="bg-card border border-border/60 rounded-2xl rounded-bl-sm px-4 py-3 flex items-center gap-3 text-xs text-muted-foreground">
+                    <span className="flex items-center gap-2">
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" /> Analyzing with USDA data...
+                    </span>
+                    <button
+                      type="button"
+                      onClick={handleCancelAnalysis}
+                      className="flex items-center gap-1 rounded-full border border-border/60 px-2 py-0.5 text-[11px] hover:text-foreground hover:border-border transition-colors"
+                    >
+                      <X className="h-3 w-3" /> Stop
+                    </button>
                   </div>
                 </div>
               )}
               <div ref={chatEndRef} />
             </div>
 
-            {/* Skip clarification */}
+            {/* "Log it anyway" — the clarifying question always offers this out */}
             {awaitingClarification && !isAnalyzing && (
               <div className="mb-2 flex justify-center">
                 <Button
@@ -1704,7 +2369,7 @@ export default function Home() {
                   className="text-xs text-muted-foreground gap-1.5"
                   onClick={handleSkipClarification}
                 >
-                  <SkipForward className="h-3.5 w-3.5" /> Skip — use average estimate
+                  <SkipForward className="h-3.5 w-3.5" /> Log it anyway — best estimates
                 </Button>
               </div>
             )}
@@ -1753,7 +2418,7 @@ export default function Home() {
               </button>
               <Input
                 value={chatInput}
-                onChange={e => setChatInput(e.target.value)}
+                onChange={e => { setChatInput(e.target.value); chatInputWasVoiceRef.current = false; }}
                 onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSendChat(); } }}
                 placeholder={awaitingClarification ? "Answer the question above..." : "What did you eat?"}
                 className="border-0 shadow-none focus-visible:ring-0 text-sm bg-transparent"
@@ -1768,6 +2433,292 @@ export default function Home() {
                 <Send className="h-4 w-4" />
               </Button>
             </div>
+          </div>
+        )}
+
+        {/* ===== WEEKLY COMPASSIONATE EXPORT ===== */}
+        {activeTab === "weekly-report" && (
+          <div className="max-w-2xl mx-auto space-y-6" id="weekly-report-page">
+            {!weeklyReport ? (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground py-16 justify-center">
+                <Loader2 className="h-4 w-4 animate-spin" /> Putting your week together...
+              </div>
+            ) : !("periodEnd" in weeklyReport) ? (
+              <div className="text-center py-16 space-y-3">
+                <Sparkles className="h-10 w-10 mx-auto stroke-1 text-muted-foreground" />
+                <h2 className="font-serif text-xl font-bold">Your first weekly report is on its way</h2>
+                <p className="text-sm text-muted-foreground max-w-sm mx-auto">
+                  It arrives after your first full week
+                  {weeklyReport.firstReportAt
+                    ? ` — around ${new Date(weeklyReportQuery.data!.firstReportAt!).toLocaleDateString("en-US", { month: "long", day: "numeric" })}`
+                    : ""}
+                  . Until then, just keep logging whenever it's natural.
+                </p>
+              </div>
+            ) : (
+              <>
+                <div className="flex items-start justify-between gap-4 print:hidden">
+                  <div>
+                    <h2 className="text-2xl font-serif font-bold">Your Week with Clover</h2>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      {new Date(weeklyReport.periodStart).toLocaleDateString("en-US", { month: "short", day: "numeric" })} – {new Date(weeklyReport.periodEnd - 1).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                    </p>
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="gap-2 shrink-0"
+                    onClick={() => {
+                      trackEvent("weekly_export_downloaded");
+                      window.print();
+                    }}
+                  >
+                    <Share2 className="h-3.5 w-3.5" /> Download / Print PDF
+                  </Button>
+                </div>
+
+                {/* The one-page export itself (print-friendly) */}
+                <Card className="border-border/60 print:border-0 print:shadow-none">
+                  <CardContent className="p-6 space-y-6">
+                    {/* Header — warm framing that reflects something real */}
+                    <div className="space-y-1">
+                      <div className="hidden print:flex items-center gap-2 text-primary font-serif font-bold pb-2">
+                        <Leaf className="h-4 w-4" /> Clover — Weekly Summary
+                      </div>
+                      <p className="font-serif text-lg font-bold">{weeklyReport.headerLine}</p>
+                      {weeklyReport.caption && (
+                        <p className="text-[11px] text-muted-foreground">{weeklyReport.caption}</p>
+                      )}
+                    </div>
+
+                    {/* Stats — averages over logged days only, no targets anywhere */}
+                    {weeklyReport.stats.daysLogged > 0 && (
+                      <div className="grid grid-cols-3 gap-px bg-border/40 rounded-xl overflow-hidden border border-border/40">
+                        <div className="bg-card px-3 py-3 text-center">
+                          <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Days logged</div>
+                          <div className="text-lg font-semibold mt-0.5">{weeklyReport.stats.daysLogged}</div>
+                        </div>
+                        <div className="bg-card px-3 py-3 text-center">
+                          <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Avg calories</div>
+                          <div className="text-lg font-semibold mt-0.5">{weeklyReport.stats.avgCalories ?? "—"}</div>
+                        </div>
+                        <div className="bg-card px-3 py-3 text-center">
+                          <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Avg protein</div>
+                          <div className="text-lg font-semibold mt-0.5">{weeklyReport.stats.avgProtein != null ? `${weeklyReport.stats.avgProtein}g` : "—"}</div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Highlights */}
+                    <div className="space-y-3">
+                      {weeklyReport.highlights.map((h, i) => (
+                        <div key={i} className="flex gap-3">
+                          <Sparkles className="h-4 w-4 text-primary shrink-0 mt-0.5" />
+                          <p className="text-sm leading-relaxed">{h}</p>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Habit-forming note — positive frame, never a missed-day count */}
+                    {weeklyReport.habitNote && (
+                      <div className="rounded-xl bg-muted/40 px-4 py-3">
+                        <p className="text-sm leading-relaxed">{weeklyReport.habitNote}</p>
+                      </div>
+                    )}
+
+                    {/* Gentle suggestion — an option, not an instruction */}
+                    {weeklyReport.gentleSuggestion && (
+                      <div className="flex gap-3">
+                        <Heart className="h-4 w-4 text-primary shrink-0 mt-0.5" />
+                        <p className="text-sm leading-relaxed text-muted-foreground">{weeklyReport.gentleSuggestion}</p>
+                      </div>
+                    )}
+
+                    {/* Footer — route to humans */}
+                    <div className="pt-4 border-t border-border/40 space-y-3">
+                      <p className="text-[11px] text-muted-foreground leading-relaxed">{weeklyReport.footerNote}</p>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="text-xs gap-1.5 print:hidden"
+                        onClick={() => setActiveTab("calendar")}
+                      >
+                        <Calendar className="h-3.5 w-3.5" /> View full history
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              </>
+            )}
+          </div>
+        )}
+
+        {/* ===== SETTINGS (goal / reminder / export email + health profile) ===== */}
+        {activeTab === "settings" && (
+          <div className="max-w-2xl space-y-6">
+            <h2 className="text-2xl font-serif font-bold">Settings</h2>
+
+            {/* Primary goal — same fixed enum as onboarding */}
+            <Card className="border-border/60">
+              <CardHeader className="p-5 border-b border-border/40">
+                <CardTitle className="font-serif text-base font-bold">Primary goal</CardTitle>
+                <CardDescription className="text-xs">Shapes what your weekly report highlights. Changes apply going forward — past reports stay as they were.</CardDescription>
+              </CardHeader>
+              <CardContent className="p-5 space-y-2">
+                {GOAL_OPTIONS.map(g => (
+                  <button
+                    key={g.value}
+                    type="button"
+                    disabled={setGoalMutation.isPending}
+                    onClick={() => {
+                      if (settingsQuery.data?.primaryGoal !== g.value) {
+                        setGoalMutation.mutate({ goal: g.value }, { onSuccess: () => toast.success("Goal updated") });
+                      }
+                    }}
+                    className={`w-full text-left rounded-xl border px-4 py-3 transition-colors ${
+                      settingsQuery.data?.primaryGoal === g.value ? "border-primary bg-primary/5" : "border-border/60 hover:border-border"
+                    }`}
+                  >
+                    <span className="block text-sm font-medium">{g.label}</span>
+                    <span className="block text-xs text-muted-foreground mt-0.5">{g.description}</span>
+                  </button>
+                ))}
+              </CardContent>
+            </Card>
+
+            {/* Daily reminder — independent toggle, off by default */}
+            <Card className="border-border/60">
+              <CardHeader className="p-5 border-b border-border/40">
+                <CardTitle className="font-serif text-base font-bold">Daily reminder</CardTitle>
+                <CardDescription className="text-xs">One reminder at a time you pick — no escalation, no re-prompts. Off unless you turn it on.</CardDescription>
+              </CardHeader>
+              <CardContent className="p-5 space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm">Remind me once a day</span>
+                  <Button
+                    variant={settingsQuery.data?.reminderEnabled ? "default" : "outline"}
+                    size="sm"
+                    disabled={setReminderMutation.isPending}
+                    onClick={() => {
+                      const enabled = !settingsQuery.data?.reminderEnabled;
+                      setReminderMutation.mutate(
+                        { enabled, time: enabled ? (settingsQuery.data?.reminderTime ?? "18:00") : null },
+                        { onSuccess: () => toast.success(enabled ? "Reminder on" : "Reminder off") }
+                      );
+                    }}
+                  >
+                    {settingsQuery.data?.reminderEnabled ? "On" : "Off"}
+                  </Button>
+                </div>
+                {settingsQuery.data?.reminderEnabled && (
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-muted-foreground">At</span>
+                    <input
+                      type="time"
+                      value={settingsQuery.data?.reminderTime ?? "18:00"}
+                      onChange={e =>
+                        setReminderMutation.mutate({ enabled: true, time: e.target.value })
+                      }
+                      className="rounded-md border border-input bg-background px-2 py-1 text-sm"
+                    />
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Weekly export email — separate from the reminder, never bundled */}
+            <Card className="border-border/60">
+              <CardHeader className="p-5 border-b border-border/40">
+                <CardTitle className="font-serif text-base font-bold">Weekly report by email</CardTitle>
+                <CardDescription className="text-xs">The in-app report is always available either way.</CardDescription>
+              </CardHeader>
+              <CardContent className="p-5">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm">Email me my weekly report</span>
+                  <Button
+                    variant={settingsQuery.data?.weeklyExportEmail ? "default" : "outline"}
+                    size="sm"
+                    disabled={setExportEmailMutation.isPending}
+                    onClick={() => {
+                      const enabled = !settingsQuery.data?.weeklyExportEmail;
+                      setExportEmailMutation.mutate(
+                        { enabled },
+                        { onSuccess: () => toast.success(enabled ? "Email on" : "Email off") }
+                      );
+                    }}
+                  >
+                    {settingsQuery.data?.weeklyExportEmail ? "On" : "Off"}
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Health profile — moved here from onboarding to keep the golden path short */}
+            <Card className="border-border/60">
+              <CardHeader className="p-5 border-b border-border/40">
+                <CardTitle className="font-serif text-base font-bold">Health profile</CardTitle>
+                <CardDescription className="text-xs">Allergies are flagged in every meal analysis. All optional.</CardDescription>
+              </CardHeader>
+              <CardContent className="p-5 space-y-5">
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-medium text-muted-foreground">Age</label>
+                    <Input type="number" placeholder="—" value={settingsAge} onChange={e => setSettingsAge(e.target.value)} />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-medium text-muted-foreground">Weight (lbs)</label>
+                    <Input type="number" placeholder="—" value={settingsWeight} onChange={e => setSettingsWeight(e.target.value)} />
+                  </div>
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-muted-foreground">Allergies & sensitivities</label>
+                  <div className="flex flex-wrap gap-2">
+                    {ALLERGEN_OPTIONS.map(a => (
+                      <Button
+                        key={a}
+                        type="button"
+                        variant={settingsAllergies.includes(a) ? "destructive" : "outline"}
+                        size="sm"
+                        onClick={() => setSettingsAllergies(toggleArr(settingsAllergies, a))}
+                        className="rounded-full h-8 px-4 text-xs"
+                      >{a}</Button>
+                    ))}
+                  </div>
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-muted-foreground">Dietary style</label>
+                  <div className="flex flex-wrap gap-2">
+                    {DIET_OPTIONS.map(d => (
+                      <Button
+                        key={d}
+                        type="button"
+                        variant={settingsDiet.includes(d) ? "default" : "outline"}
+                        size="sm"
+                        onClick={() => setSettingsDiet(toggleArr(settingsDiet, d))}
+                        className="rounded-full h-8 px-4 text-xs"
+                      >{d}</Button>
+                    ))}
+                  </div>
+                </div>
+                <Button
+                  size="sm"
+                  disabled={saveProfileMutation.isPending}
+                  onClick={() =>
+                    saveProfileMutation.mutate(
+                      {
+                        age: settingsAge ? parseInt(settingsAge) : undefined,
+                        weightLbs: settingsWeight ? parseFloat(settingsWeight) : undefined,
+                        allergies: settingsAllergies,
+                        dietaryChoices: settingsDiet,
+                      },
+                      { onSuccess: () => toast.success("Profile saved") }
+                    )
+                  }
+                >
+                  {saveProfileMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Save profile"}
+                </Button>
+              </CardContent>
+            </Card>
           </div>
         )}
 
@@ -1858,10 +2809,20 @@ export default function Home() {
                             <span className="font-medium">{log.foodName}</span>
                             {log.quantity && <span className="text-xs text-muted-foreground ml-2">({log.quantity})</span>}
                           </div>
-                          <div className="flex gap-3 text-xs font-mono text-muted-foreground">
+                          <div className="flex items-center gap-3 text-xs font-mono text-muted-foreground">
                             <span>{Math.round(Number(log.calories))} kcal</span>
                             <span className="text-emerald-600">{Math.round(Number(log.protein))}g P</span>
                             <span className="text-violet-600">{Math.round(Number(log.fiber))}g Fb</span>
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              className="h-6 w-6 text-muted-foreground hover:text-destructive"
+                              disabled={deleteLogMutation.isPending}
+                              onClick={() => deleteLogMutation.mutate({ id: log.id })}
+                              title="Remove this log"
+                            >
+                              <Trash2 className="h-3 w-3" />
+                            </Button>
                           </div>
                         </div>
                       ))}
@@ -1889,7 +2850,7 @@ export default function Home() {
           <MealPlanningTab />
         )}
         {/* ===== F. TRAVEL SOURCING ===== */}
-        {activeTab === "travel" && (
+        {FEATURE_FLAGS.travelSourcing && activeTab === "travel" && (
           <div className="space-y-8 max-w-4xl">
             <div>
               <h2 className="text-2xl sm:text-3xl font-serif font-bold tracking-tight">Travel Sourcing</h2>
@@ -1925,7 +2886,7 @@ export default function Home() {
         )}
 
         {/* ===== F. INTEGRATIONS ===== */}
-        {activeTab === "integrations" && (
+        {FEATURE_FLAGS.integrations && activeTab === "integrations" && (
           <div className="max-w-3xl mx-auto space-y-8">
             <div className="text-center space-y-2">
               <h2 className="text-2xl sm:text-3xl font-serif font-bold">Connected Integrations</h2>

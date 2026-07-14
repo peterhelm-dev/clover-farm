@@ -1,5 +1,6 @@
 import {
   bigserial,
+  index,
   integer,
   jsonb,
   numeric,
@@ -8,11 +9,36 @@ import {
   serial,
   text,
   timestamp,
+  uuid,
   varchar,
 } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 
 export const roleEnum = pgEnum("role", ["user", "admin"]);
 export const confidenceEnum = pgEnum("confidence", ["high", "medium", "low"]);
+/**
+ * How a food log was captured. 'text' covers typed entries — historically
+ * indistinguishable from voice (both land in rawSpeech), so pre-migration
+ * non-photo rows stay null rather than guessing.
+ */
+export const logMethodEnum = pgEnum("log_method", ["voice", "photo", "text"]);
+/** Failed parses must not count as a "logged day" for D14 retention. */
+export const logStatusEnum = pgEnum("log_status", ["success", "failed"]);
+/**
+ * Fixed goal set driving weekly-export highlights (golden-path spec 2.5).
+ * The enum carries the full expanded set, but a goal is only selectable in
+ * the UI once its template copy exists — goals without templates fall back
+ * to general_awareness templates rather than shipping with no matching copy.
+ */
+export const primaryGoalEnum = pgEnum("primary_goal", [
+  "weight_management",
+  "muscle_gain",
+  "protein_focus",
+  "energy_levels",
+  "blood_sugar_awareness",
+  "digestive_health",
+  "general_awareness",
+]);
 export const tierEnum = pgEnum("tier", ["free", "plus", "pro"]);
 export const referralStatusEnum = pgEnum("referral_status", ["pending", "credited"]);
 export const feedbackCategoryEnum = pgEnum("feedback_category", [
@@ -44,6 +70,20 @@ export const users = pgTable("users", {
   isTester: integer("isTester").default(0).notNull(), // 0=false, 1=true
   /** Unique referral code for this user (generated on first login) */
   referralCode: varchar("referralCode", { length: 16 }).unique(),
+  /**
+   * IANA timezone name for day-boundary calculations (user_d14_retention view).
+   * Null → UTC. Not yet populated by the app — known approximation per the
+   * D14 spec until timezone capture is added.
+   */
+  timezone: varchar("timezone", { length: 64 }),
+  /** Drives weekly-export highlight selection. Set at onboarding, editable in Settings. */
+  primaryGoal: primaryGoalEnum("primaryGoal").default("general_awareness").notNull(),
+  /** Daily reminder opt-in. Default off — user owns notifications (golden-path principle). */
+  reminderEnabled: integer("reminderEnabled").default(0).notNull(), // 0=false, 1=true
+  /** "HH:MM" 24h local time for the daily reminder. Null unless the user set one. */
+  reminderTime: varchar("reminderTime", { length: 5 }),
+  /** Weekly export email opt-in — independent of the daily reminder, never bundled. */
+  weeklyExportEmail: integer("weeklyExportEmail").default(0).notNull(), // 0=false, 1=true
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().notNull(),
   lastSignedIn: timestamp("lastSignedIn").defaultNow().notNull(),
@@ -92,8 +132,19 @@ export const foodLogs = pgTable("foodLogs", {
   fat: numeric("fat", { precision: 8, scale: 2 }).default("0"),
   fiber: numeric("fiber", { precision: 8, scale: 2 }).default("0"),
   allergensDetected: jsonb("allergensDetected").$type<string[]>().default([]),
+  /**
+   * Rough AI-estimated micronutrients for this meal. Keys are fixed
+   * (see MICRONUTRIENT_KEYS in server/routers/nutrition.ts): iron_mg,
+   * magnesium_mg, vitamin_b12_mcg, vitamin_d_mcg, potassium_mg, calcium_mg,
+   * zinc_mg, sodium_mg. Null for logs made before micro tracking existed.
+   */
+  micronutrients: jsonb("micronutrients").$type<Record<string, number>>(),
   confidence: confidenceEnum("confidence").default("medium"),
   notes: text("notes"),
+  /** Null for pre-migration rows where voice vs typed is unknowable (photo rows were backfilled). */
+  logMethod: logMethodEnum("logMethod"),
+  /** Rows are only inserted after successful analysis, so 'success' is the correct default. */
+  status: logStatusEnum("status").default("success").notNull(),
   loggedAt: timestamp("loggedAt").defaultNow().notNull(),
 });
 
@@ -248,3 +299,29 @@ export const mealPlans = pgTable("mealPlans", {
 
 export type MealPlan = typeof mealPlans.$inferSelect;
 export type InsertMealPlan = typeof mealPlans.$inferInsert;
+
+// ---------------------------------------------------------------------------
+// Events (lean first-party instrumentation — clover-instrumentation-spec.md)
+// One table for all event types; extend by logging a new event_name, no
+// migration needed. food_logs remains the source of truth for D14 — events
+// exist for funnel analysis, not as the primary activity record.
+// Adapted from the spec's SQL: user_id is integer (our users PK), not uuid.
+// ---------------------------------------------------------------------------
+export const events = pgTable(
+  "events",
+  {
+    id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+    userId: integer("user_id").references(() => users.id),
+    eventName: text("event_name").notNull(),
+    properties: jsonb("properties").default({}),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  table => [
+    index("events_user_id_idx").on(table.userId),
+    index("events_event_name_idx").on(table.eventName),
+    index("events_created_at_idx").on(table.createdAt),
+  ]
+);
+
+export type Event = typeof events.$inferSelect;
+export type InsertEvent = typeof events.$inferInsert;

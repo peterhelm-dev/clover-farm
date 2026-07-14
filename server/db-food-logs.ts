@@ -6,11 +6,11 @@ import { getDb } from "./db";
 // Food log helpers
 // ---------------------------------------------------------------------------
 
-export async function createFoodLog(data: InsertFoodLog) {
+export async function createFoodLog(data: InsertFoodLog): Promise<number> {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  const result = await db.insert(foodLogs).values(data);
-  return result;
+  const [row] = await db.insert(foodLogs).values(data).returning({ id: foodLogs.id });
+  return row.id;
 }
 
 export async function getFoodLogsByDateRange(

@@ -8,6 +8,41 @@
       "when": 1783614670774,
       "tag": "0000_nifty_the_professor",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1783649565193,
+      "tag": "0001_complete_thanos",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1783649587814,
+      "tag": "0002_d14-retention-backfill-and-view",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1783650198414,
+      "tag": "0003_golden-path-user-settings",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1783651089255,
+      "tag": "0004_events-table",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1783977132421,
+      "tag": "0005_micronutrients",
+      "breakpoints": true
     }
   ]
 }

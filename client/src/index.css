@@ -275,3 +275,21 @@
     opacity: 1;
   }
 }
+
+/* Weekly export: print only the report card (one-page PDF via browser print) */
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  #weekly-report-page,
+  #weekly-report-page * {
+    visibility: visible;
+  }
+  #weekly-report-page {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    padding: 1.5rem;
+  }
+}
