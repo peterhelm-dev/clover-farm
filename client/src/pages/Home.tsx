@@ -27,7 +27,8 @@ import {
   SidebarInset,
 } from "@/components/ui/sidebar";
 import {
-  ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, PieChart, Pie, Cell
+  ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, PieChart, Pie, Cell,
+  ComposedChart, Line, Bar, Scatter
 } from "recharts";
 import { MOCK_TRAVEL_CALENDAR } from "@shared/const";
 
@@ -183,6 +184,402 @@ function LoggedMealCard({
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Mood & feeling tracker sub-components.
+// Two-axis soft model (energy / ease) — no single mood score, no field ever
+// required, nothing framed as good/bad. Visual bones borrowed from modern
+// agent dashboards (cards, sparklines, inline suggestion cards) retoned to
+// Clover's warm register: no scores, no red/green, no bulk actions.
+// ---------------------------------------------------------------------------
+
+const FEELING_TAG_OPTIONS = ["content", "calm", "energized", "tired", "stressed", "foggy"];
+const CONTEXT_TAG_OPTIONS = ["routine", "social", "celebration", "stress", "travel"];
+
+/** 1–5 tap selector for one axis. Tap the selected dot again to unset. */
+function AxisSelector({
+  label,
+  lowLabel,
+  highLabel,
+  value,
+  onChange,
+}: {
+  label: string;
+  lowLabel: string;
+  highLabel: string;
+  value: number | null;
+  onChange: (v: number | null) => void;
+}) {
+  return (
+    <div className="space-y-1.5">
+      <div className="flex items-center justify-between">
+        <span className="text-xs font-medium">{label}</span>
+        <span className="text-[10px] text-muted-foreground">{value == null ? "not set" : ""}</span>
+      </div>
+      <div className="flex items-center gap-2">
+        <span className="text-[10px] text-muted-foreground w-10">{lowLabel}</span>
+        <div className="flex gap-1.5 flex-1 justify-center">
+          {[1, 2, 3, 4, 5].map(v => (
+            <button
+              key={v}
+              type="button"
+              onClick={() => onChange(value === v ? null : v)}
+              className={`h-6 w-6 rounded-full border transition-colors ${
+                value != null && v <= value
+                  ? "bg-primary/70 border-primary"
+                  : "bg-muted/40 border-border/60 hover:border-border"
+              }`}
+              title={`${label} ${v} of 5`}
+            />
+          ))}
+        </div>
+        <span className="text-[10px] text-muted-foreground w-10 text-right">{highLabel}</span>
+      </div>
+    </div>
+  );
+}
+
+/** Quick manual check-in — everything optional, empty submission still counts. */
+function MoodCheckInCard() {
+  const utils = trpc.useUtils();
+  const [energy, setEnergy] = useState<number | null>(null);
+  const [ease, setEase] = useState<number | null>(null);
+  const [feelings, setFeelings] = useState<string[]>([]);
+  const [contexts, setContexts] = useState<string[]>([]);
+  const [note, setNote] = useState("");
+  const [showNote, setShowNote] = useState(false);
+  const createMutation = trpc.mood.create.useMutation({
+    onSuccess: () => {
+      toast.success("Checked in");
+      setEnergy(null); setEase(null); setFeelings([]); setContexts([]); setNote(""); setShowNote(false);
+      utils.mood.list.invalidate();
+      utils.mood.insights.invalidate();
+    },
+    onError: () => toast.error("Couldn't save that check-in — try again."),
+  });
+
+  const toggle = (arr: string[], v: string, set: (a: string[]) => void) =>
+    set(arr.includes(v) ? arr.filter(x => x !== v) : [...arr, v]);
+
+  return (
+    <Card className="border-border/60">
+      <CardContent className="p-5 space-y-4">
+        <div>
+          <p className="text-sm font-medium">How are you feeling?</p>
+          <p className="text-[11px] text-muted-foreground mt-0.5">Entirely optional — set as much or as little as you like.</p>
+        </div>
+        <AxisSelector label="Energy" lowLabel="low" highLabel="high" value={energy} onChange={setEnergy} />
+        <AxisSelector label="Ease" lowLabel="tense" highLabel="at ease" value={ease} onChange={setEase} />
+        <div className="flex flex-wrap gap-1.5">
+          {FEELING_TAG_OPTIONS.map(t => (
+            <button
+              key={t}
+              type="button"
+              onClick={() => toggle(feelings, t, setFeelings)}
+              className={`text-[11px] rounded-full border px-2.5 py-1 transition-colors ${
+                feelings.includes(t)
+                  ? "border-primary bg-primary/10 text-foreground"
+                  : "border-border/60 text-muted-foreground hover:border-border"
+              }`}
+            >
+              {t}
+            </button>
+          ))}
+          {CONTEXT_TAG_OPTIONS.map(t => (
+            <button
+              key={`ctx-${t}`}
+              type="button"
+              onClick={() => toggle(contexts, t, setContexts)}
+              className={`text-[11px] rounded-full border border-dashed px-2.5 py-1 transition-colors ${
+                contexts.includes(t)
+                  ? "border-primary bg-primary/10 text-foreground"
+                  : "border-border/60 text-muted-foreground hover:border-border"
+              }`}
+            >
+              {t}
+            </button>
+          ))}
+        </div>
+        {showNote ? (
+          <Input
+            value={note}
+            onChange={e => setNote(e.target.value)}
+            placeholder="Anything you want to remember about right now..."
+            className="text-sm"
+          />
+        ) : (
+          <button
+            type="button"
+            onClick={() => setShowNote(true)}
+            className="text-[11px] text-muted-foreground underline underline-offset-2 hover:text-foreground"
+          >
+            + add a note
+          </button>
+        )}
+        <Button
+          size="sm"
+          disabled={createMutation.isPending}
+          onClick={() =>
+            createMutation.mutate({
+              source: "manual_checkin",
+              feelingTags: feelings,
+              contextTags: contexts,
+              energy,
+              ease,
+              note: note.trim() || undefined,
+            })
+          }
+        >
+          {createMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Check in"}
+        </Button>
+      </CardContent>
+    </Card>
+  );
+}
+
+/** Mood trends: two-line chart, optional food-log overlay, insight cards, editable entry list. */
+function MoodTrendsView() {
+  const utils = trpc.useUtils();
+  const [days, setDays] = useState<7 | 14 | 30>(7);
+  const [showOverlay, setShowOverlay] = useState(false);
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [editNote, setEditNote] = useState("");
+  const [editEnergy, setEditEnergy] = useState<number | null>(null);
+  const [editEase, setEditEase] = useState<number | null>(null);
+  const [cardChoices, setCardChoices] = useState<Record<string, "saved" | "dismissed">>(() => {
+    try { return JSON.parse(localStorage.getItem("clover-mood-insight-choices") ?? "{}"); } catch { return {}; }
+  });
+
+  const listQuery = trpc.mood.list.useQuery({ days });
+  const insightsQuery = trpc.mood.insights.useQuery();
+  const logsQuery = trpc.foodLogs.getAll.useQuery();
+  const updateMutation = trpc.mood.update.useMutation({
+    onSuccess: () => { utils.mood.list.invalidate(); setEditingId(null); toast.success("Updated"); },
+  });
+  const deleteMutation = trpc.mood.delete.useMutation({
+    onSuccess: () => { utils.mood.list.invalidate(); utils.mood.insights.invalidate(); toast.success("Entry removed"); },
+  });
+
+  const chooseCard = (id: string, choice: "saved" | "dismissed") => {
+    const next = { ...cardChoices, [id]: choice };
+    setCardChoices(next);
+    localStorage.setItem("clover-mood-insight-choices", JSON.stringify(next));
+  };
+
+  // Per-day chart rows across the whole window (days without data stay blank —
+  // the lines simply skip them; absence is never rendered as a zero).
+  const entries = listQuery.data ?? [];
+  const chartData: { day: string; label: string; energy: number | null; ease: number | null; meals: number; linked: number | null }[] = [];
+  {
+    const byDay = new Map<string, { e: number[]; a: number[]; linked: boolean }>();
+    for (const en of entries) {
+      const day = new Date(en.createdAt).toISOString().slice(0, 10);
+      const acc = byDay.get(day) ?? { e: [], a: [], linked: false };
+      if (en.energy != null) acc.e.push(en.energy);
+      if (en.ease != null) acc.a.push(en.ease);
+      if (en.linkedFoodLogId != null) acc.linked = true;
+      byDay.set(day, acc);
+    }
+    const mealsByDay = new Map<string, number>();
+    for (const log of logsQuery.data ?? []) {
+      const day = new Date(log.loggedAt).toISOString().slice(0, 10);
+      mealsByDay.set(day, (mealsByDay.get(day) ?? 0) + 1);
+    }
+    for (let i = days - 1; i >= 0; i--) {
+      const d = new Date(Date.now() - i * 86400000);
+      const day = d.toISOString().slice(0, 10);
+      const acc = byDay.get(day);
+      const meals = mealsByDay.get(day) ?? 0;
+      chartData.push({
+        day,
+        label: d.toLocaleDateString("en-US", { month: "numeric", day: "numeric" }),
+        energy: acc && acc.e.length > 0 ? Math.round((acc.e.reduce((s, x) => s + x, 0) / acc.e.length) * 10) / 10 : null,
+        ease: acc && acc.a.length > 0 ? Math.round((acc.a.reduce((s, x) => s + x, 0) / acc.a.length) * 10) / 10 : null,
+        meals,
+        linked: acc?.linked ? meals + 0.3 : null,
+      });
+    }
+  }
+  const hasAxisData = chartData.some(r => r.energy != null || r.ease != null);
+
+  const sourceLabel = (s: string) =>
+    s === "manual_checkin" ? "check-in" : s === "chat_extracted" ? "from your chat" : "retrospective";
+
+  const visibleInsights = (insightsQuery.data ?? []).filter(c => cardChoices[c.id] !== "dismissed");
+
+  return (
+    <div className="max-w-3xl space-y-6">
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <h2 className="text-2xl font-serif font-bold">How you've felt</h2>
+          <p className="text-xs text-muted-foreground mt-1">Patterns to notice, not scores to hit. Edit or remove anything here — including what Clover picked up from your chat.</p>
+        </div>
+        <div className="flex gap-1 shrink-0">
+          {([7, 14, 30] as const).map(d => (
+            <Button key={d} variant={days === d ? "secondary" : "ghost"} size="sm" className="h-7 px-2.5 text-xs" onClick={() => setDays(d)}>
+              {d}d
+            </Button>
+          ))}
+        </div>
+      </div>
+
+      {/* Trend chart */}
+      <Card className="border-border/60">
+        <CardContent className="p-5">
+          {!hasAxisData ? (
+            <p className="text-xs text-muted-foreground py-6 text-center">
+              No energy or ease data yet — check in from the Home tab whenever you feel like it, or just keep chatting; Clover quietly notices context you mention.
+            </p>
+          ) : (
+            <>
+              <ResponsiveContainer width="100%" height={220}>
+                <ComposedChart data={chartData} margin={{ top: 8, right: 8, bottom: 0, left: -18 }}>
+                  <XAxis dataKey="label" tick={{ fontSize: 10 }} tickLine={false} axisLine={false} />
+                  <YAxis domain={[0, 5]} ticks={[1, 2, 3, 4, 5]} tick={{ fontSize: 10 }} tickLine={false} axisLine={false} />
+                  {showOverlay && <YAxis yAxisId="meals" orientation="right" hide domain={[0, "dataMax + 2"]} />}
+                  <Tooltip
+                    formatter={(value: any, name: any) =>
+                      name === "meals" ? [`${value} logged`, "meals"] : name === "linked" ? ["mood noted with a meal", ""] : [value, name]
+                    }
+                  />
+                  {showOverlay && <Bar yAxisId="meals" dataKey="meals" fill="hsl(var(--muted-foreground) / 0.15)" radius={[3, 3, 0, 0]} />}
+                  {showOverlay && <Scatter yAxisId="meals" dataKey="linked" fill="#8b5cf6" />}
+                  <Line type="monotone" dataKey="energy" stroke="#10b981" strokeWidth={2} dot={{ r: 2.5 }} connectNulls name="energy" />
+                  <Line type="monotone" dataKey="ease" stroke="#8b5cf6" strokeWidth={2} dot={{ r: 2.5 }} connectNulls name="ease" />
+                </ComposedChart>
+              </ResponsiveContainer>
+              <div className="flex items-center justify-between mt-2">
+                <div className="flex gap-4 text-[10px] text-muted-foreground">
+                  <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-emerald-500" /> Energy</span>
+                  <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-violet-500" /> Ease</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowOverlay(v => !v)}
+                  className={`text-[10px] rounded-full border px-2 py-0.5 transition-colors ${showOverlay ? "border-primary text-foreground bg-primary/5" : "border-border/60 text-muted-foreground hover:border-border"}`}
+                >
+                  {showOverlay ? "Hide" : "Show"} food-log overlay
+                </button>
+              </div>
+              <p className="text-[10px] text-muted-foreground mt-2">Lines connect only the days you have data — quiet days are simply quiet, not zeros. The overlay shows your meals per day and marks days where a feeling was noted alongside a meal; what you make of any overlap is yours to decide.</p>
+            </>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Insight cards — single, standalone, optional observations */}
+      {visibleInsights.length > 0 && (
+        <div className="space-y-2">
+          {visibleInsights.map(card => (
+            <Card key={card.id} className="border-border/60">
+              <CardContent className="p-4 flex items-start gap-3">
+                <Sparkles className="h-4 w-4 text-primary shrink-0 mt-0.5" />
+                <div className="flex-1 space-y-2">
+                  <p className="text-sm leading-relaxed">{card.text}</p>
+                  <div className="flex gap-2">
+                    {cardChoices[card.id] === "saved" ? (
+                      <span className="text-[10px] text-primary flex items-center gap-1"><Check className="h-3 w-3" /> Noticing</span>
+                    ) : (
+                      <>
+                        <button type="button" onClick={() => chooseCard(card.id, "saved")} className="text-[11px] rounded-full border border-border/60 px-2.5 py-1 text-muted-foreground hover:text-foreground hover:border-border transition-colors">
+                          Save to notice
+                        </button>
+                        <button type="button" onClick={() => chooseCard(card.id, "dismissed")} className="text-[11px] rounded-full border border-border/60 px-2.5 py-1 text-muted-foreground hover:text-foreground hover:border-border transition-colors">
+                          Not helpful
+                        </button>
+                      </>
+                    )}
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
+
+      {/* Entry list — everything editable and deletable, extraction included */}
+      <Card className="border-border/60">
+        <CardHeader className="p-5 border-b border-border/40">
+          <CardTitle className="font-serif text-base font-bold">Entries</CardTitle>
+        </CardHeader>
+        <CardContent className="p-5">
+          {listQuery.isLoading ? (
+            <div className="flex items-center gap-2 text-xs text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" /> Loading...</div>
+          ) : entries.length === 0 ? (
+            <p className="text-xs text-muted-foreground">Nothing in this window yet.</p>
+          ) : (
+            <div className="space-y-3">
+              {entries.map(en => (
+                <div key={en.id} className="border-b border-border/30 pb-3 last:border-0 last:pb-0">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0 space-y-1">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-[10px] text-muted-foreground">
+                          {new Date(en.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}, {new Date(en.createdAt).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}
+                        </span>
+                        <Badge variant="outline" className="text-[9px]">{sourceLabel(en.source)}</Badge>
+                        {en.energy != null && <span className="text-[10px] text-emerald-700">energy {en.energy}/5</span>}
+                        {en.ease != null && <span className="text-[10px] text-violet-700">ease {en.ease}/5</span>}
+                      </div>
+                      {(en.feelingTags?.length || en.contextTags?.length) ? (
+                        <div className="flex flex-wrap gap-1">
+                          {[...(en.feelingTags ?? []), ...(en.contextTags ?? [])].map((t, i) => (
+                            <span key={i} className="text-[10px] rounded-full bg-muted/60 px-2 py-0.5">{t}</span>
+                          ))}
+                        </div>
+                      ) : null}
+                      {en.note && <p className="text-xs text-muted-foreground italic">{en.note}</p>}
+                      {en.source === "chat_extracted" && en.sourceText && (
+                        <p className="text-[10px] text-muted-foreground/70 truncate">from: “{en.sourceText}”</p>
+                      )}
+                    </div>
+                    <div className="flex gap-1 shrink-0">
+                      <Button
+                        size="icon" variant="ghost" className="h-6 w-6 text-muted-foreground hover:text-foreground"
+                        onClick={() => {
+                          if (editingId === en.id) { setEditingId(null); return; }
+                          setEditingId(en.id);
+                          setEditNote(en.note ?? "");
+                          setEditEnergy(en.energy);
+                          setEditEase(en.ease);
+                        }}
+                        title="Edit"
+                      >
+                        <Pencil className="h-3 w-3" />
+                      </Button>
+                      <Button
+                        size="icon" variant="ghost" className="h-6 w-6 text-muted-foreground hover:text-destructive"
+                        disabled={deleteMutation.isPending}
+                        onClick={() => deleteMutation.mutate({ id: en.id })}
+                        title="Delete"
+                      >
+                        <Trash2 className="h-3 w-3" />
+                      </Button>
+                    </div>
+                  </div>
+                  {editingId === en.id && (
+                    <div className="mt-3 space-y-3 rounded-xl border border-border/40 p-3">
+                      <AxisSelector label="Energy" lowLabel="low" highLabel="high" value={editEnergy} onChange={setEditEnergy} />
+                      <AxisSelector label="Ease" lowLabel="tense" highLabel="at ease" value={editEase} onChange={setEditEase} />
+                      <Input value={editNote} onChange={e => setEditNote(e.target.value)} placeholder="Note (optional)" className="text-sm" />
+                      <Button
+                        size="sm"
+                        disabled={updateMutation.isPending}
+                        onClick={() => updateMutation.mutate({ id: en.id, energy: editEnergy, ease: editEase, note: editNote.trim() || null })}
+                      >
+                        {updateMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Save"}
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }
@@ -605,6 +1002,8 @@ export default function Home() {
   });
   const healthOverviewMutation = trpc.healthInsights.overview.useMutation();
   const healthChatMutation = trpc.healthInsights.chat.useMutation();
+  // Passive mood capture — fire-and-forget, never surfaces in the chat.
+  const moodCreateMutation = trpc.mood.create.useMutation();
   const deleteLogMutation = trpc.foodLogs.delete.useMutation({
     onSuccess: () => {
       utils.foodLogs.getByDate.invalidate();
@@ -641,7 +1040,7 @@ export default function Home() {
   });
 
   // ---- UI state ----
-  const [activeTab, setActiveTab] = useState<"home" | "dashboard" | "voice-logger" | "calendar" | "weekly-report" | "settings" | "recipes" | "mealplan" | "travel" | "integrations" | "billing">("home");
+  const [activeTab, setActiveTab] = useState<"home" | "dashboard" | "voice-logger" | "calendar" | "weekly-report" | "mood" | "settings" | "recipes" | "mealplan" | "travel" | "integrations" | "billing">("home");
   // Beta-Gated tabs must be unreachable, not just unlinked — if state ever
   // points at one while its flag is off, bounce back to the dashboard.
   useEffect(() => {
@@ -690,6 +1089,9 @@ export default function Home() {
     onSuccess: () => settingsQuery.refetch(),
   });
   const setExportEmailMutation = trpc.settings.setWeeklyExportEmail.useMutation({
+    onSuccess: () => settingsQuery.refetch(),
+  });
+  const setMoodExtractionMutation = trpc.settings.setMoodExtraction.useMutation({
     onSuccess: () => settingsQuery.refetch(),
   });
 
@@ -958,6 +1360,10 @@ export default function Home() {
           dayOffset: m.dayOffset as 0 | -1,
         });
       }
+      if (result.meals.length === 0) {
+        toast.error("That didn't sound like a meal — try describing what you ate, e.g. \"two eggs on toast\".");
+        return;
+      }
       setOnboardFirstLogDone(true);
       trackEvent("first_log_completed", { method: onboardLogWasVoice ? "voice" : "text" });
       toast.success(`Logged: ${result.meals.map(m => m.foodName).join(", ")}`);
@@ -1054,7 +1460,6 @@ export default function Home() {
   const processText = useCallback(async (text: string, clarificationCtx: string | undefined, round: number, method: "voice" | "text") => {
     const gen = analysisGenRef.current;
     setIsAnalyzing(true);
-    if (round === 0) trackEvent("log_attempt_started", { method });
     try {
       const result = await analyzeTranscript.mutateAsync({
         transcript: text,
@@ -1063,6 +1468,38 @@ export default function Home() {
       });
       // User hit Stop while the model was thinking — discard everything.
       if (analysisGenRef.current !== gen) return;
+
+      // Conversational turn (question, symptom mention, greeting) — the model
+      // answers from the user's data. May accompany meals or stand alone.
+      if (result.reply) {
+        addChatMsg({ role: "ai", text: result.reply });
+      }
+
+      if (result.meals.length === 0) {
+        // Nothing to log — pure conversation. No log events, no cards.
+        if (!result.reply) {
+          addChatMsg({ role: "ai", text: "I didn't catch a meal in that — describe what you ate, or ask me anything about your nutrition." });
+        }
+        // Silent mood capture (retrospective by design — no inline surfacing)
+        if (result.moodContext) {
+          moodCreateMutation.mutate(
+            {
+              source: "chat_extracted",
+              feelingTags: result.moodContext.feelingTags,
+              contextTags: result.moodContext.contextTags,
+              energy: result.moodContext.energy,
+              ease: result.moodContext.ease,
+              sourceText: text,
+            },
+            { onError: () => {} }
+          );
+        }
+        setIsAnalyzing(false);
+        return;
+      }
+
+      // Log-attempt funnel events only count messages that carried food.
+      if (round === 0) trackEvent("log_attempt_started", { method });
 
       if (result.clarifyingQuestion && round === 0) {
         setAwaitingClarification(true);
@@ -1117,6 +1554,23 @@ export default function Home() {
       setClarificationHistory([]);
       logSessionCountRef.current += entries.length;
       trackEvent("log_attempt_succeeded", { method, meal_count_in_session: logSessionCountRef.current });
+
+      // Silent mood capture, linked to the log it came with (retrospective —
+      // discoverable in the trends view, never surfaced here)
+      if (result.moodContext) {
+        moodCreateMutation.mutate(
+          {
+            source: "chat_extracted",
+            feelingTags: result.moodContext.feelingTags,
+            contextTags: result.moodContext.contextTags,
+            energy: result.moodContext.energy,
+            ease: result.moodContext.ease,
+            linkedFoodLogId: entries[0]?.logId,
+            sourceText: text,
+          },
+          { onError: () => {} }
+        );
+      }
 
       addChatMsg({
         role: "ai",
@@ -1693,6 +2147,7 @@ export default function Home() {
               { id: "voice-logger" as const, label: "Log a Meal", icon: Mic, pulse: true, dot: false },
               { id: "calendar" as const, label: "Past Logs", icon: Calendar, pulse: false, dot: false },
               { id: "weekly-report" as const, label: "Weekly Report", icon: Sparkles, pulse: false, dot: weeklyReportReady },
+              { id: "mood" as const, label: "How You've Felt", icon: Heart, pulse: false, dot: false },
               { id: "settings" as const, label: "Settings", icon: Pencil, pulse: false, dot: false },
             ]).map(({ id, label, icon: Icon, pulse, dot }) => (
               <Button
@@ -1813,6 +2268,9 @@ export default function Home() {
                 })()}
               </p>
             </div>
+
+            {/* Quick mood check-in — optional, no streaks, nothing required */}
+            <MoodCheckInCard />
 
             {/* Quiet access points: past logs + weekly report */}
             <div className="grid grid-cols-2 gap-3">
@@ -2229,7 +2687,7 @@ export default function Home() {
           <div className="max-w-2xl mx-auto flex flex-col h-[calc(100vh-8rem)]">
             <div className="mb-4">
               <h2 className="text-2xl font-serif font-bold">Voice Food Logger</h2>
-              <p className="text-xs text-muted-foreground mt-1">Speak or type what you ate. Clover AI will extract the nutrition and save it to your log.</p>
+              <p className="text-xs text-muted-foreground mt-1">Speak or type what you ate — or ask about your nutrition. Clover logs meals and answers from your own data.</p>
             </div>
 
             {/* Chat area */}
@@ -2237,8 +2695,8 @@ export default function Home() {
               {chatMessages.length === 0 && (
                 <div className="text-center py-16 text-muted-foreground">
                   <Mic className="h-10 w-10 mx-auto mb-3 stroke-1" />
-                  <p className="text-sm font-medium">Start logging your food</p>
-                  <p className="text-xs mt-1">Try: "I had oatmeal with banana and a coffee"</p>
+                  <p className="text-sm font-medium">Log a meal — or just ask</p>
+                  <p className="text-xs mt-1">Try: "I had oatmeal with banana and a coffee" · "How's my protein this week?" · "I've been feeling tired lately"</p>
                 </div>
               )}
               {chatMessages.map(msg => {
@@ -2420,7 +2878,7 @@ export default function Home() {
                 value={chatInput}
                 onChange={e => { setChatInput(e.target.value); chatInputWasVoiceRef.current = false; }}
                 onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSendChat(); } }}
-                placeholder={awaitingClarification ? "Answer the question above..." : "What did you eat?"}
+                placeholder={awaitingClarification ? "Answer the question above..." : "Log a meal or ask me anything..."}
                 className="border-0 shadow-none focus-visible:ring-0 text-sm bg-transparent"
                 disabled={isAnalyzing || isAnalyzingPhoto}
               />
@@ -2553,6 +3011,9 @@ export default function Home() {
           </div>
         )}
 
+        {/* ===== MOOD TRENDS ===== */}
+        {activeTab === "mood" && <MoodTrendsView />}
+
         {/* ===== SETTINGS (goal / reminder / export email + health profile) ===== */}
         {activeTab === "settings" && (
           <div className="max-w-2xl space-y-6">
@@ -2648,6 +3109,35 @@ export default function Home() {
                     }}
                   >
                     {settingsQuery.data?.weeklyExportEmail ? "On" : "Off"}
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Mood & feelings — passive extraction toggle */}
+            <Card className="border-border/60">
+              <CardHeader className="p-5 border-b border-border/40">
+                <CardTitle className="font-serif text-base font-bold">Mood & feelings</CardTitle>
+                <CardDescription className="text-xs">
+                  When you mention how you're feeling in the chat ("stress ate a whole sleeve of crackers"), Clover can quietly note the context for your trends view — it never comments on it in the chat. Manual check-ins work either way.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="p-5">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm">Notice feelings mentioned in chat</span>
+                  <Button
+                    variant={settingsQuery.data?.moodExtractionEnabled ? "default" : "outline"}
+                    size="sm"
+                    disabled={setMoodExtractionMutation.isPending}
+                    onClick={() => {
+                      const enabled = !settingsQuery.data?.moodExtractionEnabled;
+                      setMoodExtractionMutation.mutate(
+                        { enabled },
+                        { onSuccess: () => toast.success(enabled ? "Clover will quietly notice context you mention" : "Chat extraction off — manual check-ins still work") }
+                      );
+                    }}
+                  >
+                    {settingsQuery.data?.moodExtractionEnabled ? "On" : "Off"}
                   </Button>
                 </div>
               </CardContent>

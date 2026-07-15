@@ -4,22 +4,11 @@ import { z } from "zod";
 import { TRPCError } from "@trpc/server";
 import { getOrCreateSubscription, incrementAICallsUsed } from "../db-subscriptions";
 import { getAICallLimit } from "../products";
+import { buildLogContext, SYMPTOM_GUARDRAILS } from "../log-context";
+import { MICRONUTRIENT_KEYS } from "../nutrients";
 
-/**
- * Fixed micronutrient panel — rough per-meal estimates from typical food
- * composition. Chosen for relevance to common wellness questions (energy,
- * sleep, hydration balance). Keys must match foodLogs.micronutrients.
- */
-export const MICRONUTRIENT_KEYS = [
-  "iron_mg",
-  "magnesium_mg",
-  "vitamin_b12_mcg",
-  "vitamin_d_mcg",
-  "potassium_mg",
-  "calcium_mg",
-  "zinc_mg",
-  "sodium_mg",
-] as const;
+// Re-export for existing importers (foodLogs router, tests).
+export { MICRONUTRIENT_KEYS };
 
 const micronutrientSchemaProps = Object.fromEntries(
   MICRONUTRIENT_KEYS.map(k => [
@@ -42,9 +31,8 @@ const NUTRITION_JSON_SCHEMA = {
     properties: {
       meals: {
         type: "array",
-        minItems: 1,
         description:
-          "One entry per distinct meal or eating occasion described. A single meal description = one entry.",
+          "One entry per distinct meal or eating occasion described. A single meal description = one entry. EMPTY ARRAY when the message contains no food to log (a question, a feeling, a greeting).",
         items: {
           type: "object",
           properties: {
@@ -105,10 +93,42 @@ const NUTRITION_JSON_SCHEMA = {
           additionalProperties: false,
         },
       },
+      reply: {
+        type: ["string", "null"],
+        description:
+          "Conversational response when the message is (or includes) something other than a food description — a question about their data or patterns, a symptom mention ('I'm feeling tired'), a greeting, anything. Ground it in the user's data context. Warm, concise (under 120 words). Null when the message is purely a food log.",
+      },
+      moodContext: {
+        type: ["object", "null"],
+        description:
+          "Silent pattern-tagging of emotional/contextual language in the message ('ugh, stress ate a whole sleeve of crackers', 'felt great after lunch'). This is NEVER mentioned in reply, notes, or clarifyingQuestion — it is captured quietly for the user's own trends view. Pattern tags only (stress, tiredness, celebration, social, routine, contentment) — never clinical or diagnostic labels, never a good/bad judgment. Null when the message carries no feeling/context language (most messages).",
+        properties: {
+          feelingTags: {
+            type: "array",
+            items: { type: "string" },
+            description: "Short feeling words actually reflected in the message (e.g. 'stressed', 'content', 'exhausted', 'celebratory'). 1-3 max.",
+          },
+          contextTags: {
+            type: "array",
+            items: { type: "string" },
+            description: "Situational context: 'stress', 'social', 'celebration', 'tired', 'routine'. 1-2 max.",
+          },
+          energy: {
+            type: ["number", "null"],
+            description: "1 (very low) to 5 (very high), ONLY when the message clearly signals energy level; otherwise null.",
+          },
+          ease: {
+            type: ["number", "null"],
+            description: "1 (tense) to 5 (at ease), ONLY when clearly signaled; otherwise null.",
+          },
+        },
+        required: ["feelingTags", "contextTags", "energy", "ease"],
+        additionalProperties: false,
+      },
       clarifyingQuestion: {
         type: ["string", "null"],
         description:
-          "If — and only if — the description has multiple ambiguous details that meaningfully change the estimates, combine ALL of them into ONE natural question, and ALWAYS end it by offering to log anyway (e.g. '…— or I can just log my best guess now.'). This is your only chance to ask. Set to null when the description is clear enough.",
+          "Only for ambiguous FOOD descriptions: if multiple details meaningfully change the estimates, combine ALL of them into ONE natural question, and ALWAYS end it by offering to log anyway (e.g. '…— or I can just log my best guess now.'). This is your only chance to ask. Null when clear enough, and always null when meals is empty.",
       },
       confidence: {
         type: "string",
@@ -122,16 +142,24 @@ const NUTRITION_JSON_SCHEMA = {
           "Optional brief nutritional note or health tip relevant to the food. Null if nothing notable.",
       },
     },
-    required: ["meals", "clarifyingQuestion", "confidence", "notes"],
+    required: ["meals", "reply", "moodContext", "clarifyingQuestion", "confidence", "notes"],
     additionalProperties: false,
   },
 };
 
-const SYSTEM_PROMPT = `You are a professional nutritionist and dietitian AI assistant embedded in a wellness app called Clover.
+const SYSTEM_PROMPT = `You are Clover — a warm, knowledgeable nutrition companion in a wellness app. The user talks to you in one chat, and each message can be one of three things (or a mix):
 
-Your job is to analyze natural-language food descriptions (spoken or typed) and extract accurate nutritional estimates.
+1. A FOOD LOG ("I had oatmeal this morning") → extract it into meals[].
+2. A QUESTION or something conversational ("how's my protein this week?", "I'm feeling tired lately", "hey") → meals stays empty; answer in 'reply', grounded in the user's data context below.
+3. BOTH ("just had a burger — also, why am I so tired?") → extract the meals AND answer in 'reply'.
 
-Guidelines:
+Never force a non-food message into a meal. Never ignore a question just because food was also mentioned.
+
+SILENT MOOD CONTEXT: separately from all of the above, if the message carries emotional or situational language ("stress ate a whole sleeve of crackers", "felt really good after lunch", "exhausted today"), fill moodContext with soft pattern tags. This is quiet bookkeeping for the user's own trends view — NEVER acknowledge it in reply, notes, or clarifyingQuestion, never say "I noticed you're stressed". Pattern tags only — never anything resembling a clinical or mental-health label, never good/bad framing. Most messages have no such language: moodContext is null by default.
+
+${SYMPTOM_GUARDRAILS}
+
+Food extraction guidelines:
 - Use USDA FoodData Central values as your reference for nutritional estimates.
 - When quantities are not specified, use the most common serving size for that food.
 - If cooking method is ambiguous (e.g. eggs could be fried, scrambled, boiled), assume the simplest preparation unless context suggests otherwise.
@@ -161,8 +189,17 @@ const mealSchema = z.object({
   dayOffset: z.number().int().min(-1).max(0),
 });
 
+const moodContextSchema = z.object({
+  feelingTags: z.array(z.string().min(1).max(40)).max(5).default([]),
+  contextTags: z.array(z.string().min(1).max(40)).max(5).default([]),
+  energy: z.number().int().min(1).max(5).nullable().default(null),
+  ease: z.number().int().min(1).max(5).nullable().default(null),
+});
+
 const analysisSchema = z.object({
-  meals: z.array(mealSchema).min(1),
+  meals: z.array(mealSchema),
+  reply: z.string().nullable().default(null),
+  moodContext: moodContextSchema.nullable().default(null),
   clarifyingQuestion: z.string().nullable(),
   confidence: z.enum(["high", "medium", "low"]),
   notes: z.string().nullable(),
@@ -172,18 +209,18 @@ export type MealAnalysis = z.infer<typeof mealSchema>;
 
 export const nutritionRouter = router({
   /**
-   * Analyzes a food description and returns structured nutritional data —
-   * one entry per distinct meal, each with rough time-of-day placement.
-   * Accepts an optional `context` string (e.g. a previous clarifying answer).
-   * Enforces AI call limits based on subscription tier.
+   * The chat brain: analyzes each message as a food log (meals[]), a
+   * data-grounded conversational turn (reply), or both. Meals carry rough
+   * time-of-day placement. Accepts an optional `context` string (e.g. a
+   * previous clarifying answer). Enforces AI call limits by tier.
    */
   analyzeTranscript: protectedProcedure
     .input(
       z.object({
         transcript: z
           .string()
-          .min(3, "Transcript too short")
-          .max(2000, "Transcript too long"),
+          .min(1, "Message is empty")
+          .max(2000, "Message too long"),
         /** Optional: user's answer to a previous clarifying question */
         clarificationContext: z.string().max(500).optional(),
         /** Optional: user's known allergies to cross-reference */
@@ -208,7 +245,7 @@ export const nutritionRouter = router({
       }
 
       // Build the user message, incorporating any clarification context
-      let userMessage = `Food description: "${transcript}"`;
+      let userMessage = `User message: "${transcript}"`;
 
       if (clarificationContext) {
         userMessage += `\n\nAdditional context from user: "${clarificationContext}"`;
@@ -223,11 +260,15 @@ export const nutritionRouter = router({
         }
       }
 
+      // The user's data context makes 'reply' answers real instead of generic —
+      // this is what lets "I'm feeling tired" get a grounded, honest response.
+      const logContext = await buildLogContext(ctx.user.id);
+
       let result;
       try {
         result = await invokeLLM({
           messages: [
-            { role: "system", content: SYSTEM_PROMPT },
+            { role: "system", content: `${SYSTEM_PROMPT}\n\n--- USER DATA CONTEXT ---\n${logContext}` },
             { role: "user", content: userMessage },
           ],
           response_format: {
@@ -259,6 +300,19 @@ export const nutritionRouter = router({
           code: "INTERNAL_SERVER_ERROR",
           message: "AI response could not be parsed as JSON.",
         });
+      }
+
+      // Respect the extraction toggle server-side, and drop empty extractions —
+      // a moodContext with no tags and no axis values carries no signal.
+      if (
+        !ctx.user.moodExtractionEnabled ||
+        (parsed.moodContext &&
+          parsed.moodContext.feelingTags.length === 0 &&
+          parsed.moodContext.contextTags.length === 0 &&
+          parsed.moodContext.energy == null &&
+          parsed.moodContext.ease == null)
+      ) {
+        parsed.moodContext = null;
       }
 
       // Increment AI calls used for this user

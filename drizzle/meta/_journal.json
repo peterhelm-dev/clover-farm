@@ -43,6 +43,13 @@
       "when": 1783977132421,
       "tag": "0005_micronutrients",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1784123816778,
+      "tag": "0006_mood-entries",
+      "breakpoints": true
     }
   ]
 }

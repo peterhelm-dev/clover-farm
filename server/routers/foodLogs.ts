@@ -10,26 +10,7 @@ import {
   getUserProfile,
   upsertUserProfile,
 } from "../db-food-logs";
-import { MICRONUTRIENT_KEYS } from "./nutrition";
-
-/**
- * General adult reference ranges — informational context only, NOT personal
- * targets or medical guidance. `upperLimit` marks nutrients where the concern
- * is exceeding, not reaching (sodium).
- */
-export const NUTRIENT_REFERENCES: Record<
-  (typeof MICRONUTRIENT_KEYS)[number],
-  { label: string; unit: string; low: number; high: number; upperLimit?: boolean }
-> = {
-  iron_mg: { label: "Iron", unit: "mg", low: 8, high: 18 },
-  magnesium_mg: { label: "Magnesium", unit: "mg", low: 310, high: 420 },
-  vitamin_b12_mcg: { label: "Vitamin B12", unit: "mcg", low: 2.4, high: 2.8 },
-  vitamin_d_mcg: { label: "Vitamin D", unit: "mcg", low: 15, high: 20 },
-  potassium_mg: { label: "Potassium", unit: "mg", low: 2600, high: 3400 },
-  calcium_mg: { label: "Calcium", unit: "mg", low: 1000, high: 1200 },
-  zinc_mg: { label: "Zinc", unit: "mg", low: 8, high: 11 },
-  sodium_mg: { label: "Sodium", unit: "mg", low: 0, high: 2300, upperLimit: true },
-};
+import { MICRONUTRIENT_KEYS, NUTRIENT_REFERENCES } from "../nutrients";
 
 /**
  * Rough meal-period anchor hours (UTC, matching the app's existing UTC-day

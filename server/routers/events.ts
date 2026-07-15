@@ -23,6 +23,8 @@ const CLIENT_EVENT_NAMES = [
   // Weekly export engagement
   "weekly_export_viewed",
   "weekly_export_downloaded",
+  // Mood tracker
+  "mood_checkin_completed",
 ] as const;
 
 export const eventsRouter = router({

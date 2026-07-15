@@ -24,7 +24,22 @@ export const settingsRouter = router({
     reminderEnabled: !!ctx.user.reminderEnabled,
     reminderTime: ctx.user.reminderTime,
     weeklyExportEmail: !!ctx.user.weeklyExportEmail,
+    moodExtractionEnabled: !!ctx.user.moodExtractionEnabled,
   })),
+
+  /** Passive mood extraction from chat — one-tap off, manual check-ins unaffected. */
+  setMoodExtraction: protectedProcedure
+    .input(z.object({ enabled: z.boolean() }))
+    .mutation(async ({ ctx, input }) => {
+      const db = await getDb();
+      if (!db) throw new Error("Database not available");
+      await db
+        .update(users)
+        .set({ moodExtractionEnabled: input.enabled ? 1 : 0 })
+        .where(eq(users.id, ctx.user.id));
+      void logEvent(ctx.user.id, "mood_extraction_toggled", { enabled: input.enabled });
+      return { success: true } as const;
+    }),
 
   setGoal: protectedProcedure
     .input(z.object({ goal: z.enum(SELECTABLE_GOALS) }))

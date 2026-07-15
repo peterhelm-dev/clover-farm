@@ -1,4 +1,5 @@
 import {
+  bigint,
   bigserial,
   index,
   integer,
@@ -84,6 +85,12 @@ export const users = pgTable("users", {
   reminderTime: varchar("reminderTime", { length: 5 }),
   /** Weekly export email opt-in — independent of the daily reminder, never bundled. */
   weeklyExportEmail: integer("weeklyExportEmail").default(0).notNull(), // 0=false, 1=true
+  /**
+   * Passive mood extraction from chat messages. Default ON per the mood spec,
+   * discoverable and one-tap to disable in Settings. Manual check-ins work
+   * regardless of this setting.
+   */
+  moodExtractionEnabled: integer("moodExtractionEnabled").default(1).notNull(), // 0=false, 1=true
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().notNull(),
   lastSignedIn: timestamp("lastSignedIn").defaultNow().notNull(),
@@ -325,3 +332,48 @@ export const events = pgTable(
 
 export type Event = typeof events.$inferSelect;
 export type InsertEvent = typeof events.$inferInsert;
+
+// ---------------------------------------------------------------------------
+// Mood entries (mood & feeling tracker spec)
+// Two-axis soft model (energy / ease), never a single good-bad score.
+// Adapted from the spec for this schema: integer PKs/FKs (not uuid), and
+// sourceText replaces linked_chat_message_id because chat messages are
+// client-side only — the raw message text serves the same audit purpose.
+// ---------------------------------------------------------------------------
+export const moodSourceEnum = pgEnum("mood_source", [
+  "manual_checkin",
+  "chat_extracted",
+  "retrospective",
+]);
+
+export const moodEntries = pgTable(
+  "moodEntries",
+  {
+    id: serial("id").primaryKey(),
+    userId: integer("userId").notNull(),
+    source: moodSourceEnum("source").notNull(),
+    /** Soft feeling tags — free-form or from the suggested set. Never a forced score. */
+    feelingTags: jsonb("feelingTags").$type<string[]>().default([]),
+    /** Context tags: stress, social, celebration, tired, routine, ... optional. */
+    contextTags: jsonb("contextTags").$type<string[]>().default([]),
+    /** Energy axis 1–5 (low ↔ high). Null = not set; null never implies "bad". */
+    energy: integer("energy"),
+    /** Ease axis 1–5 (tense ↔ at ease). Null = not set. */
+    ease: integer("ease"),
+    /** Optional 1–5, user never required to set this. */
+    intensity: integer("intensity"),
+    note: text("note"),
+    /** Set when the mood was captured alongside a specific food log. */
+    linkedFoodLogId: bigint("linkedFoodLogId", { mode: "number" }),
+    /** For chat_extracted rows: the message the tags came from (transparency/audit). */
+    sourceText: text("sourceText"),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+  },
+  table => [
+    index("mood_entries_user_id_idx").on(table.userId),
+    index("mood_entries_created_at_idx").on(table.createdAt),
+  ]
+);
+
+export type MoodEntry = typeof moodEntries.$inferSelect;
+export type InsertMoodEntry = typeof moodEntries.$inferInsert;

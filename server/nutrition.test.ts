@@ -170,6 +170,44 @@ describe("nutrition.analyzeTranscript", () => {
     expect(result.meals[0].mealPeriod).toBe("dinner");
   });
 
+  it("answers conversationally (no meals) when the message isn't a food log", async () => {
+    mockLLMResponse({
+      meals: [],
+      reply:
+        "On the days you logged, your estimated iron ran below the typical range — that can relate to energy, though sleep and stress aren't tracked here. Worth mentioning to a doctor if it persists.",
+      clarifyingQuestion: null,
+      confidence: "medium",
+      notes: null,
+    });
+
+    const caller = createCaller();
+    const result = await caller.analyzeTranscript({
+      transcript: "I've been feeling tired lately",
+    });
+
+    expect(result.meals).toHaveLength(0);
+    expect(result.reply).toBeTruthy();
+    expect(result.clarifyingQuestion).toBeNull();
+  });
+
+  it("logs food AND answers when a message does both", async () => {
+    mockLLMResponse({
+      meals: [meal({ foodName: "Cheeseburger", mealPeriod: "lunch" })],
+      reply: "Logged your burger! On the tiredness — your logged days show solid protein, but iron estimates have been on the low side.",
+      clarifyingQuestion: null,
+      confidence: "medium",
+      notes: null,
+    });
+
+    const caller = createCaller();
+    const result = await caller.analyzeTranscript({
+      transcript: "just had a cheeseburger for lunch — also why am I so tired lately?",
+    });
+
+    expect(result.meals).toHaveLength(1);
+    expect(result.reply).toContain("iron");
+  });
+
   it("returns a clarifying question when the description is ambiguous", async () => {
     mockLLMResponse({
       meals: [meal({ foodName: "Eggs", calories: 140 })],
@@ -287,12 +325,27 @@ describe("nutrition.analyzeTranscript", () => {
     });
   });
 
-  it("rejects transcripts that are too short", async () => {
+  it("rejects empty messages", async () => {
     const caller = createCaller();
     await expect(
-      caller.analyzeTranscript({ transcript: "hi" })
+      caller.analyzeTranscript({ transcript: "" })
     ).rejects.toMatchObject({
       code: "BAD_REQUEST",
     });
+  });
+
+  it("accepts short conversational messages (they are no longer 'too short')", async () => {
+    mockLLMResponse({
+      meals: [],
+      reply: "Hey! Log a meal whenever you're ready, or ask me anything about your week.",
+      clarifyingQuestion: null,
+      confidence: "medium",
+      notes: null,
+    });
+
+    const caller = createCaller();
+    const result = await caller.analyzeTranscript({ transcript: "hi" });
+    expect(result.reply).toBeTruthy();
+    expect(result.meals).toHaveLength(0);
   });
 });
